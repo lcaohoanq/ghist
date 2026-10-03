@@ -15,7 +15,7 @@ func TestParseArgs(t *testing.T) {
 	}{
 		{[]string{"file.go"}, "file.go", false},
 		{[]string{"--", "-file"}, "-file", false},
-		{nil, "", true}, {[]string{"a", "b"}, "", true}, {[]string{"--unknown"}, "", true},
+		{nil, "", false}, {[]string{"--"}, "", false}, {[]string{""}, "", true}, {[]string{"a", "b"}, "", true}, {[]string{"--unknown"}, "", true},
 	} {
 		var out bytes.Buffer
 		got, err := parseArgs(tc.args, &out)

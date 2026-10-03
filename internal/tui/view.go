@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 
@@ -52,7 +53,7 @@ func (m Model) columns() historyColumns {
 	}
 	width := m.listWidth()
 	showDate := width >= 60
-	fixed := 13 // selection, hash and column spacing
+	fixed := 15 // selection, hash and column spacing
 	if showDate {
 		fixed += 12
 	}
@@ -97,13 +98,13 @@ func (m Model) View() tea.View {
 	rows = append(rows, paint("90", strings.Repeat("─", m.width)))
 	columns := m.columns()
 	if m.mode == historyView {
-		header := paint("1;90", columns.row("  ", "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
+		header := paint("1;90", columns.row("    ", "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
 		if m.previewVisible() {
 			marker, previewMarker := "> ", "  "
 			if m.previewFocus {
 				marker, previewMarker = "  ", "> "
 			}
-			header = paint("1;36", columns.row(marker, "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
+			header = paint("1;36", columns.row("  "+marker, "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
 			title := previewMarker + "Diff"
 			if len(m.history.Versions) > 0 {
 				title += " · " + single(m.history.Versions[m.selected].Commit.ShortHash)
@@ -119,12 +120,32 @@ func (m Model) View() tea.View {
 	case m.err != nil:
 		body = []string{paint("31", "Error: "+single(m.err.Error()))}
 	case m.mode == historyView:
-		start := max(0, m.selected-m.bodyHeight()+1)
-		for i := start; i < len(m.history.Versions) && len(body) < m.bodyHeight(); i++ {
-			c := m.history.Versions[i].Commit
-			line := columns.row("  ", c.ShortHash, c.Date.Format("02-01-2006"), c.Author, c.Subject, true)
-			if i == m.selected {
-				line = columns.row("> ", c.ShortHash, c.Date.Format("02-01-2006"), c.Author, c.Subject, false)
+		visible := m.historyRows()
+		for i := m.historyOffset; i < len(visible) && len(body) < m.bodyHeight(); i++ {
+			row := visible[i]
+			var line string
+			if row.header {
+				arrow := "▾"
+				if m.collapsed[row.group] {
+					arrow = "▸"
+				}
+				label := "commits"
+				if row.count == 1 {
+					label = "commit"
+				}
+				line = fmt.Sprintf("%s %s · %d %s", arrow, m.history.Versions[row.group].Commit.Date.Format("02-01-2006"), row.count, label)
+				if i != m.historyCursor {
+					line = paint("1;36", line)
+				}
+			} else {
+				c := m.history.Versions[row.version].Commit
+				marker := "    "
+				if i == m.historyCursor {
+					marker = "  > "
+				}
+				line = columns.row(marker, c.ShortHash, c.Date.Format("02-01-2006"), c.Author, c.Subject, i != m.historyCursor)
+			}
+			if i == m.historyCursor {
 				line = paint("1;7", cell(line, m.listWidth()))
 			}
 			body = append(body, line)
@@ -148,9 +169,12 @@ func (m Model) View() tea.View {
 		rows = append(rows, line)
 	}
 	rows = append(rows, paint("90", strings.Repeat("─", m.width)))
-	help := "↑↓/jk select · Enter inspect · d diff · f file · p older · n newer · q quit"
+	help := "←/→ fold · Enter toggle/inspect · ↑↓ select · d/f view · p/n version · q quit"
 	if m.previewVisible() {
-		help = "Tab focus · ↑↓/PgUp/PgDn scroll · Enter/d expand · s split/unified · f file · p/n version · q quit"
+		help = "←/→ fold · Enter toggle/inspect · Tab focus · ↑↓ scroll · d/f view · s layout · p/n version · q quit"
+	}
+	if m.mode == historyView && m.pickerEnabled {
+		help = "Esc files · " + help
 	}
 	if m.mode != historyView {
 		help = "↑↓/jk/PgUp/PgDn scroll · s split/unified · d diff · f file · p/n version · Esc back · q quit"

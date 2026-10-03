@@ -24,6 +24,9 @@ const (
 )
 
 type Model struct {
+	pickerEnabled, backToPicker     bool
+	historyCursor, historyOffset    int
+	collapsed                       map[int]bool
 	preview                         previewState
 	previewFocus                    bool
 	diffUnified                     bool
@@ -53,8 +56,18 @@ type contentMsg struct {
 
 func New(ctx context.Context, service Explorer, path string) Model {
 	ctx, stop := context.WithCancel(ctx)
-	return Model{ctx: ctx, stop: stop, service: service, path: path, width: 80, height: 24, loading: true}
+	return Model{ctx: ctx, stop: stop, service: service, path: path, width: 80, height: 24, loading: true, historyCursor: 1}
 }
+
+// WithPicker enables returning to file selection with Esc from History.
+func (m Model) WithPicker() Model {
+	m.pickerEnabled = true
+	return m
+}
+
+// BackToPicker distinguishes navigation from quitting the application.
+func (m Model) BackToPicker() bool { return m.backToPicker }
+
 func (m Model) Init() tea.Cmd {
 	return func() tea.Msg {
 		h, err := m.service.ExploreFile(m.ctx)
@@ -130,6 +143,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = max(1, msg.Width)
 		m.height = max(1, msg.Height)
 		m.clampOffset()
+		m.clampHistory()
 		m.clampPreview()
 		if !m.previewVisible() {
 			m.invalidatePreview()
@@ -141,6 +155,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case historyMsg:
 		m.loading = false
 		m.history = msg.history
+		m.selected = 0
+		m.collapsed = nil
+		m.historyOffset = 0
+		m.revealSelected()
 		m.err = msg.err
 		if m.err == nil && len(m.history.Versions) == 0 {
 			m.err = history.ErrNoHistory
@@ -182,6 +200,10 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "esc":
+		if m.mode == historyView && m.pickerEnabled {
+			m.backToPicker = true
+			return m.key("q")
+		}
 		m.previewFocus = false
 		if m.mode == fileView {
 			cmd := m.load(diffView)
@@ -190,6 +212,7 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 		if m.mode == diffView {
 			m.invalidate()
 			m.mode = historyView
+			m.clampHistory()
 			m.offset = 0
 			m.err = nil
 			m.content = ""
@@ -200,6 +223,14 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 	}
 	if len(m.history.Versions) == 0 {
 		return m, nil
+	}
+	if m.mode == historyView && !m.previewFocus {
+		rows := m.historyRows()
+		header := len(rows) > 0 && rows[min(m.historyCursor, len(rows)-1)].header
+		if key == "left" || key == "right" || (header && (key == "enter" || key == "space" || key == " ")) {
+			m.toggleHistoryGroup(key)
+			return m, nil
+		}
 	}
 	switch key {
 	case "enter":
@@ -225,6 +256,7 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 		next := m.history.Move(m.selected, delta)
 		if next != m.selected {
 			m.selected = next
+			m.revealSelected()
 			if m.mode != historyView {
 				cmd := m.load(m.mode)
 				return m, cmd
@@ -253,18 +285,15 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 			}
 			m.clampPreview()
 		} else if m.mode == historyView {
-			previous := m.selected
-			m.selected = m.history.Move(m.selected, delta)
+			next := m.historyCursor + delta
 			if key == "home" {
-				m.selected = 0
+				next = 0
 			}
 			if key == "end" {
-				m.selected = len(m.history.Versions) - 1
+				next = len(m.historyRows()) - 1
 			}
-			if previous != m.selected {
-				cmd := m.schedulePreview()
-				return m, cmd
-			}
+			cmd := m.focusHistoryRow(next)
+			return m, cmd
 		} else {
 			m.offset += delta
 			if key == "home" {

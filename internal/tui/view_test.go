@@ -18,6 +18,7 @@ func TestHistoryColumnsStayAligned(t *testing.T) {
 		m.width = width
 		for selected := range m.history.Versions {
 			m.selected = selected
+			m.revealSelected()
 			screen := m.View().Content
 			position := -1
 			count := 0
@@ -30,7 +31,7 @@ func TestHistoryColumnsStayAligned(t *testing.T) {
 				}
 				plain := ansi.Strip(line)
 				// At narrow widths, only the beginning of the message remains visible.
-				index := strings.Index(plain, "MESSAGE-T")
+				index := strings.Index(plain, "MESSAGE")
 				if index < 0 {
 					continue
 				}

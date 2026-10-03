@@ -17,9 +17,6 @@ import (
 
 func run() error {
 	path := os.Getenv("FILE")
-	if path == "" {
-		return fmt.Errorf("set FILE to a tracked file; e.g. make dev FILE=README.md")
-	}
 	tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
 		return err
@@ -50,7 +47,11 @@ func run() error {
 		_ = term.Restore(tty.Fd(), state)
 		_ = unix.IoctlSetPointerInt(fd, unix.TIOCSPGRP, foreground)
 	}()
-	cmd := exec.Command("./tmp/ghist", "--", path)
+	var args []string
+	if path != "" {
+		args = []string{"--", path}
+	}
+	cmd := exec.Command("./tmp/ghist", args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = tty, tty, tty
 	if err = cmd.Start(); err != nil {
 		return err

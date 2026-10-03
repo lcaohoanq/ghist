@@ -84,7 +84,7 @@ func TestPreviewNavigationAndMouse(t *testing.T) {
 	if m.selected != 1 || m.preview.offset != 0 {
 		t.Fatal("list wheel")
 	}
-	updateModel(&m, tea.MouseClickMsg{X: 2, Y: 6, Button: tea.MouseLeft})
+	updateModel(&m, tea.MouseClickMsg{X: 2, Y: 7, Button: tea.MouseLeft})
 	if m.selected != 0 || m.previewFocus {
 		t.Fatal("list click")
 	}
