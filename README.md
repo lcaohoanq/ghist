@@ -1,5 +1,7 @@
 # ghist
 
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/e9c81cb2-6ccd-4cf8-84dd-647190168b77" />
+
 Explore how a file evolved, directly from your terminal.
 
 ```sh
