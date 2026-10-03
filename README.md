@@ -121,6 +121,10 @@ make build
 make check
 ```
 
+GitHub Actions runs `make check` (vet and tests with the race detector) and
+`make build` on Ubuntu for every push and pull request. The CI workflow uses the
+Go version from `go.mod` and can also be started manually from the Actions tab.
+
 - `internal/git`: Git CLI adapter and repository integration tests.
 - `internal/history`: UI-independent data, adapter interface and service.
 - `internal/tui`: Bubble Tea v2 state, asynchronous loading and rendering.
