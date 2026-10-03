@@ -102,18 +102,23 @@ For interactive hot reload on Linux/macOS, install
 go install github.com/air-verse/air@v1.67.4
 make dev                              # open the file picker
 make dev FILE=internal/tui/view.go
+make dev PROJECT=/path/to/repo        # open another project's file picker
+make dev PROJECT=/path/to/repo FILE=src/main.go
 # Paths containing spaces also work:
 make dev FILE="/path/to/repo/my file.go"
 ```
 
 Ensure Go's binary install directory (`go env GOBIN`, or `$(go env GOPATH)/bin`
 when GOBIN is empty) is on PATH. Use a file with committed Git history.
+`PROJECT` sets the app's working directory; it defaults to the ghist directory.
+Relative `PROJECT` paths are resolved from the ghist directory, and relative
+`FILE` paths are resolved from `PROJECT`. Quote paths containing spaces.
 Air watches Go sources and module files, builds into ignored `tmp/`, and
 restarts the app after changes. Each restart resets the selected commit and
 scroll position. `q` exits the TUI; then `Ctrl+C` stops the Air watcher.
 The development helper reconnects the foreground terminal and restores its
 state on restart. Build errors are recorded in `tmp/build-errors.log`.
-You can also run `FILE=path/to/file air -c .air.toml` directly.
+You can also run `PROJECT=/path/to/repo FILE=path/to/file air -c .air.toml` directly.
 
 
 ```sh
