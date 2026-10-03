@@ -10,17 +10,18 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/term"
-	gitrepo "github.com/lcaohoanq/ghist/internal/git"
 	"github.com/lcaohoanq/ghist/internal/history"
 	"github.com/lcaohoanq/ghist/internal/tui"
 )
 
 const usage = `ghist — explore how a file evolved
 
-Usage: ghist [--] <file>
+Usage: ghist [--] [<file>]
        ghist --help
 
 Explore committed history from HEAD, following file renames.
+Without a file, fuzzy-find a file in HEAD using fzf (Enter selects; Esc cancels).
+Esc from History returns to the picker when no file argument was given.
 Paths are relative to your current directory; absolute paths also work.
 Use -- before filenames beginning with a dash.
 
@@ -35,8 +36,11 @@ func parseArgs(args []string, out io.Writer) (string, error) {
 	if err := flags.Parse(args); err != nil {
 		return "", err
 	}
-	if flags.NArg() != 1 {
-		return "", errors.New("expected one file path; usage: ghist [--] <file>")
+	if flags.NArg() > 1 {
+		return "", errors.New("expected at most one file path; usage: ghist [--] [<file>]")
+	}
+	if flags.NArg() == 1 && flags.Arg(0) == "" {
+		return "", errors.New("file path must not be empty")
 	}
 	return flags.Arg(0), nil
 }
@@ -53,16 +57,29 @@ func run(args []string) error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	repo, err := gitrepo.Open(ctx, path)
-	if err != nil {
-		return err
+	for {
+		repo, err := openTarget(ctx, path)
+		if errors.Is(err, errPickerCancelled) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		model := tui.New(ctx, history.NewService(repo), repo.Path)
+		if path == "" {
+			model = model.WithPicker()
+		}
+		final, err := tea.NewProgram(model, tea.WithContext(ctx)).Run()
+		if errors.Is(err, tea.ErrInterrupted) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if result, ok := final.(tui.Model); !ok || !result.BackToPicker() {
+			return nil
+		}
 	}
-	model := tui.New(ctx, history.NewService(repo), repo.Path)
-	_, err = tea.NewProgram(model, tea.WithContext(ctx)).Run()
-	if errors.Is(err, tea.ErrInterrupted) {
-		return nil
-	}
-	return err
 }
 func main() {
 	if err := run(os.Args[1:]); err != nil {

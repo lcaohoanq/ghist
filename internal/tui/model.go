@@ -24,6 +24,7 @@ const (
 )
 
 type Model struct {
+	pickerEnabled, backToPicker     bool
 	historyCursor, historyOffset    int
 	collapsed                       map[int]bool
 	preview                         previewState
@@ -57,6 +58,16 @@ func New(ctx context.Context, service Explorer, path string) Model {
 	ctx, stop := context.WithCancel(ctx)
 	return Model{ctx: ctx, stop: stop, service: service, path: path, width: 80, height: 24, loading: true, historyCursor: 1}
 }
+
+// WithPicker enables returning to file selection with Esc from History.
+func (m Model) WithPicker() Model {
+	m.pickerEnabled = true
+	return m
+}
+
+// BackToPicker distinguishes navigation from quitting the application.
+func (m Model) BackToPicker() bool { return m.backToPicker }
+
 func (m Model) Init() tea.Cmd {
 	return func() tea.Msg {
 		h, err := m.service.ExploreFile(m.ctx)
@@ -189,6 +200,10 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "esc":
+		if m.mode == historyView && m.pickerEnabled {
+			m.backToPicker = true
+			return m.key("q")
+		}
 		m.previewFocus = false
 		if m.mode == fileView {
 			cmd := m.load(diffView)

@@ -158,3 +158,65 @@ func TestQuitCancelsInitialHistory(t *testing.T) {
 		t.Fatal("initial history context was not cancelled")
 	}
 }
+
+func TestEscapeReturnsToPicker(t *testing.T) {
+	for _, state := range []string{"history", "preview", "loading", "error"} {
+		t.Run(state, func(t *testing.T) {
+			parent, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			m := New(parent, &fakeExplorer{}, "file").WithPicker()
+			m.history = testHistory()
+			m.loading = state == "loading"
+			m.width = 120
+			m.previewFocus = state == "preview"
+			if state == "error" {
+				m.err = errors.New("history failed")
+			}
+			wait := m.schedulePreview()
+			next, quit := m.key("esc")
+			result := next.(Model)
+			if quit == nil || !result.BackToPicker() {
+				t.Fatal("did not return to picker")
+			}
+			if result.ctx.Err() != context.Canceled || parent.Err() != nil {
+				t.Fatal("wrong cancellation scope")
+			}
+			if result.preview.loading || result.loading {
+				t.Fatal("loads not cancelled")
+			}
+			if wait != nil && wait() != nil {
+				t.Fatal("preview timer not cancelled")
+			}
+		})
+	}
+}
+
+func TestPickerEscapeHierarchyAndQuit(t *testing.T) {
+	m := ready().WithPicker()
+	defer m.stop()
+	keyModel(&m, "f")
+	keyModel(&m, "esc")
+	if m.mode != diffView || m.BackToPicker() {
+		t.Fatal("file must return to diff")
+	}
+	keyModel(&m, "esc")
+	if m.mode != historyView || m.BackToPicker() {
+		t.Fatal("diff must return to history")
+	}
+	keyModel(&m, "esc")
+	if !m.BackToPicker() {
+		t.Fatal("history must return to picker")
+	}
+	for _, key := range []string{"q", "ctrl+c"} {
+		m := ready().WithPicker()
+		if keyModel(&m, key) == nil || m.BackToPicker() {
+			t.Fatal("quit should exit", key)
+		}
+	}
+	direct := ready()
+	defer direct.stop()
+	direct.previewFocus = true
+	if keyModel(&direct, "esc") != nil || direct.BackToPicker() || direct.previewFocus || direct.ctx.Err() != nil {
+		t.Fatal("direct-file escape behavior changed")
+	}
+}

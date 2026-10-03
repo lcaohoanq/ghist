@@ -173,6 +173,9 @@ func (m Model) View() tea.View {
 	if m.previewVisible() {
 		help = "←/→ fold · Enter toggle/inspect · Tab focus · ↑↓ scroll · d/f view · s layout · p/n version · q quit"
 	}
+	if m.mode == historyView && m.pickerEnabled {
+		help = "Esc files · " + help
+	}
 	if m.mode != historyView {
 		help = "↑↓/jk/PgUp/PgDn scroll · s split/unified · d diff · f file · p/n version · Esc back · q quit"
 	}

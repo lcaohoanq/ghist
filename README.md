@@ -15,11 +15,29 @@ service, credentials, or network connection is needed at runtime.
 ## Usage
 
 ```sh
+ghist                            # fuzzy-find a file, then Enter to open history
 ghist internal/order/service.go
 ghist /absolute/path/to/repo/file.go
 ghist -- -filename
 ghist --help
 ```
+
+With no arguments, ghist uses [fzf](https://github.com/junegunn/fzf#installation)
+to fuzzy-find a file across the current repository, including when launched from
+a subdirectory. Type part of a name or path, use the arrow keys to select, and
+press `Enter` to open History. `Esc` / `Ctrl+C` cancels without an error.
+Only this mode requires `fzf`; passing a file works without it. No `rg` is needed.
+The picker uses its own options rather than `FZF_DEFAULT_OPTS` or its options file.
+
+Candidates are files in the captured `HEAD`, including tracked dotfiles and
+symlinks, excluding submodules and files added only to the index or working tree.
+A file deleted locally is still selectable; a file deleted from `HEAD` can still
+be explored by passing its path directly. In picker mode, `Esc` from History
+returns to file selection (also when the preview has focus). From full-screen
+File/Diff, `Esc` first goes back through Diff/History. `q` / `Ctrl+C` quits ghist.
+Returning to the picker starts a fresh search and refreshes the files from HEAD;
+opening a file starts a fresh History view. Passing a file directly keeps the
+existing `Esc` behavior.
 
 Paths are relative to your current directory. Run from a repository subdirectory
 or pass an absolute path. Deleted files work if their path still has Git history.
@@ -37,7 +55,7 @@ not included. The tool never checks out a revision or modifies your repository.
 | `s` | Toggle split/unified diff (split requires 100 columns in the diff panel) |
 | `p`, `n` | Older / newer file version |
 | `PgUp`, `PgDn`, `Home`, `End` | Page / jump in the list or content |
-| `Esc` | Focus history from preview; file → diff → history |
+| `Esc` | File → diff → history → picker (when started without a file); direct-file mode focuses history from preview |
 | `q`, `Ctrl+C` | Cancel loading and quit |
 
 At 110 columns or wider, History shows a 45% commit list and 55% diff preview
@@ -80,6 +98,7 @@ For interactive hot reload on Linux/macOS, install
 
 ```sh
 go install github.com/air-verse/air@v1.67.4
+make dev                              # open the file picker
 make dev FILE=internal/tui/view.go
 # Paths containing spaces also work:
 make dev FILE="/path/to/repo/my file.go"

@@ -79,14 +79,11 @@ func Open(ctx context.Context, path string) (*Repository, error) {
 		}
 		dir = parent
 	}
-	rootBytes, err := run(ctx, dir, "rev-parse", "--show-toplevel")
+	repo, err := OpenDirectory(ctx, dir)
 	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		return nil, fmt.Errorf("%w: %w", history.ErrNotRepository, err)
+		return nil, err
 	}
-	root := strings.TrimSuffix(string(rootBytes), "\n")
+	root := repo.Root
 	// Resolve symlinks in the existing parent, but preserve a tracked symlink file.
 	resolvedDir, err := filepath.EvalSymlinks(dir)
 	if err != nil {
@@ -104,6 +101,23 @@ func Open(ctx context.Context, path string) (*Repository, error) {
 	if relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
 		return nil, fmt.Errorf("file is outside repository: %s", path)
 	}
+	repo.Path = filepath.ToSlash(relative)
+	return repo, nil
+}
+
+// OpenDirectory captures a repository's HEAD without selecting a file.
+func OpenDirectory(ctx context.Context, dir string) (*Repository, error) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return nil, fmt.Errorf("Git is required; install git and try again: %w", err)
+	}
+	rootBytes, err := run(ctx, dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %w", history.ErrNotRepository, err)
+	}
+	root := strings.TrimSuffix(string(rootBytes), "\n")
 	head, err := run(ctx, root, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
 		if ctx.Err() != nil {
@@ -111,5 +125,5 @@ func Open(ctx context.Context, path string) (*Repository, error) {
 		}
 		return nil, fmt.Errorf("%w: %w", history.ErrNoCommits, err)
 	}
-	return &Repository{Root: root, Path: filepath.ToSlash(relative), Head: strings.TrimSpace(string(head))}, nil
+	return &Repository{Root: root, Head: strings.TrimSpace(string(head))}, nil
 }
