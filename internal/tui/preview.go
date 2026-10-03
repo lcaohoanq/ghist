@@ -160,18 +160,16 @@ func (m Model) mouse(mouse tea.Mouse, wheel bool) (tea.Model, tea.Cmd) {
 			m.clampPreview()
 			return m, nil
 		}
-		next := m.history.Move(m.selected, delta)
-		if next != m.selected {
-			m.selected = next
-			cmd := m.schedulePreview()
-			return m, cmd
-		}
+		cmd := m.focusHistoryRow(m.historyCursor + delta)
+		return m, cmd
 	} else if !inPreview && mouse.Y >= 6 {
-		start := max(0, m.selected-m.bodyHeight()+1)
-		next := start + mouse.Y - 6
-		if next < len(m.history.Versions) && next != m.selected {
-			m.selected = next
-			cmd := m.schedulePreview()
+		next := m.historyOffset + mouse.Y - 6
+		rows := m.historyRows()
+		if next < len(rows) {
+			cmd := m.focusHistoryRow(next)
+			if rows[next].header {
+				m.toggleHistoryGroup("toggle")
+			}
 			return m, cmd
 		}
 	}
