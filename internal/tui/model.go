@@ -303,7 +303,7 @@ func (m Model) metadata() []string {
 	}
 	return []string{
 		fmt.Sprintf("%s  %s", c.ShortHash, c.Subject),
-		fmt.Sprintf("%s <%s>  %s", c.Author, c.Email, c.Date.Format("2006-01-02 15:04:05 -07:00")),
+		fmt.Sprintf("%s <%s>  %s", c.Author, c.Email, c.Date.Format("02-01-2006 15:04:05 -07:00")),
 		fmt.Sprintf("%s | %s | version %d/%d", v.Path(), parent, m.selected+1, len(m.history.Versions)),
 	}
 }

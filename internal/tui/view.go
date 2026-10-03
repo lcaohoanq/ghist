@@ -122,9 +122,9 @@ func (m Model) View() tea.View {
 		start := max(0, m.selected-m.bodyHeight()+1)
 		for i := start; i < len(m.history.Versions) && len(body) < m.bodyHeight(); i++ {
 			c := m.history.Versions[i].Commit
-			line := columns.row("  ", c.ShortHash, c.Date.Format("2006-01-02"), c.Author, c.Subject, true)
+			line := columns.row("  ", c.ShortHash, c.Date.Format("02-01-2006"), c.Author, c.Subject, true)
 			if i == m.selected {
-				line = columns.row("> ", c.ShortHash, c.Date.Format("2006-01-02"), c.Author, c.Subject, false)
+				line = columns.row("> ", c.ShortHash, c.Date.Format("02-01-2006"), c.Author, c.Subject, false)
 				line = paint("1;7", cell(line, m.listWidth()))
 			}
 			body = append(body, line)
