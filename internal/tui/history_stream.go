@@ -12,11 +12,13 @@ type historyBatchMsg struct {
 	versions []history.FileVersion
 	done     bool
 	err      error
+	elapsed  time.Duration
 }
 
 // One queued version and one queued batch bound the producer's lead over UI.
 // Only this coordinator owns batches; versions are never mutated after sending.
 func streamHistory(ctx context.Context, source history.HistoryStreamer, out chan<- historyBatchMsg) {
+	started := time.Now()
 	defer close(out)
 	versions := make(chan history.FileVersion, 1)
 	completed := make(chan error, 1)
@@ -37,7 +39,7 @@ func streamHistory(ctx context.Context, source history.HistoryStreamer, out chan
 	first := true
 	send := func(done bool, err error) bool {
 		select {
-		case out <- historyBatchMsg{batch, done, err}:
+		case out <- historyBatchMsg{versions: batch, done: done, err: err, elapsed: time.Since(started)}:
 			batch = make([]history.FileVersion, 0, 64)
 			return true
 		case <-ctx.Done():

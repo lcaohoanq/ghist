@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -177,6 +178,8 @@ func (m Model) View() tea.View {
 	}
 	if m.historyLoading {
 		help = fmt.Sprintf("Loaded %d commits · loading more… · ", len(m.history.Versions)) + help
+	} else if m.historyComplete && m.historyErr == nil {
+		help = fmt.Sprintf("Fetched %d commits in %s · ", len(m.history.Versions), m.historyElapsed.Round(time.Millisecond)) + help
 	}
 	if m.historyErr != nil && len(m.history.Versions) > 0 {
 		help = "History incomplete: " + single(m.historyErr.Error()) + " · " + help

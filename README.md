@@ -97,7 +97,10 @@ can be scrolled. Resize a very small terminal to see the full interface.
 ## Large repositories
 
 History streams into the UI as Git produces results. You can inspect loaded
-commits while older history is still arriving; the footer shows progress.
+commits while older history is still arriving; the footer shows progress. Once
+the entire history finishes loading, it shows the commit count and total fetch
+time (for example, `Fetched 120 commits in 1.234s`). This measures history loading,
+including delivery of streamed batches, and does not wait for diff previews.
 Returning to the picker or quitting cancels the traversal. If loading fails after
 some commits arrive, they remain available with a “History incomplete” message.
 

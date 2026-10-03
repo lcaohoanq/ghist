@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/lcaohoanq/ghist/internal/history"
@@ -28,6 +29,8 @@ type Model struct {
 	historyCursor, historyOffset    int
 	historyEvents                   chan historyBatchMsg
 	historyLoading                  bool
+	historyComplete                 bool
+	historyElapsed                  time.Duration
 	historyErr                      error
 	renderCache                     *renderCache
 	collapsed                       map[int]bool
@@ -50,6 +53,7 @@ type Model struct {
 }
 
 type historyMsg struct {
+	elapsed time.Duration
 	history history.FileHistory
 	err     error
 }
@@ -81,8 +85,9 @@ func (m Model) Init() tea.Cmd {
 		}
 	}
 	return func() tea.Msg {
+		started := time.Now()
 		h, err := m.service.ExploreFile(m.ctx)
-		return historyMsg{h, err}
+		return historyMsg{history: h, err: err, elapsed: time.Since(started)}
 	}
 }
 func (m *Model) invalidate() {
@@ -188,6 +193,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		first := len(m.history.Versions) == 0
 		m.historyLoading = !msg.done
+		m.historyComplete = msg.done && msg.err == nil
+		m.historyElapsed = msg.elapsed
 		m.historyErr = msg.err
 		m.history.Versions = append(m.history.Versions, msg.versions...)
 		if m.mode == historyView {
@@ -206,6 +213,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(m.awaitHistory(), preview)
 	case historyMsg:
+		if m.ctx.Err() != nil {
+			return m, nil
+		}
+		m.historyComplete = msg.err == nil && len(msg.history.Versions) > 0
+		m.historyElapsed = msg.elapsed
+		m.historyLoading = false
 		m.renderCache = &renderCache{}
 		m.loading = false
 		m.history = msg.history

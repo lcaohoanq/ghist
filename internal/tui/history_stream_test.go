@@ -67,7 +67,10 @@ func TestHistoryBatchesPreserveNavigationAndContent(t *testing.T) {
 	keyModel(&m, "esc")
 	keyModel(&m, "p")
 	cursor := m.historyCursor
-	updateModel(&m, historyBatchMsg{done: true})
+	updateModel(&m, historyBatchMsg{done: true, elapsed: 1234 * time.Millisecond})
+	if !strings.Contains(m.View().Content, "Fetched 2 commits in 1.234s") {
+		t.Fatal("completion duration not shown")
+	}
 	if m.selected != 1 || m.historyCursor != cursor || m.historyLoading {
 		t.Fatal("completion reset selection")
 	}
@@ -92,6 +95,9 @@ func TestHistoryStreamErrorsAndLateResults(t *testing.T) {
 	defer m.stop()
 	updateModel(&m, historyBatchMsg{versions: testHistory().Versions})
 	updateModel(&m, historyBatchMsg{done: true, err: errors.New("interrupted read")})
+	if strings.Contains(m.View().Content, "Fetched") {
+		t.Fatal("failed history shown as complete")
+	}
 	if !strings.Contains(m.View().Content, "History incomplete") || len(m.history.Versions) != 2 {
 		t.Fatal("partial results discarded")
 	}
