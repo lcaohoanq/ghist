@@ -76,6 +76,9 @@ func (m *Model) fetchPreview() tea.Cmd {
 			return nil
 		}
 		diff, err := service.GetDiff(ctx, version)
+		if diff.Truncated {
+			diff.Patch = limitedNotice + diff.Patch
+		}
 		if err == nil && diff.Patch == "" {
 			diff.Patch = "No changes relative to the first parent."
 		}
@@ -84,7 +87,7 @@ func (m *Model) fetchPreview() tea.Cmd {
 }
 
 func (m Model) previewLines() []string {
-	return renderDiff(m.preview.content, m.previewWidth(), m.diffUnified)
+	return m.cachedLines(m.preview.content, m.previewWidth(), false, true)
 }
 func (m *Model) clampPreview() {
 	m.preview.offset = max(0, min(m.preview.offset, max(0, len(m.previewLines())-m.bodyHeight())))

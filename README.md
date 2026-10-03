@@ -55,6 +55,7 @@ not included. The tool never checks out a revision or modifies your repository.
 | `←`, `→` | Collapse / expand the focused day group |
 | `d`, `f` | Open diff or full file |
 | `s` | Toggle split/unified diff (split requires 100 columns in the diff panel) |
+| `L` | Load full output when a diff or file exceeds the initial 2 MiB limit |
 | `p`, `n` | Older / newer file version |
 | `PgUp`, `PgDn`, `Home`, `End` | Page / jump in the list or content |
 | `Esc` | File → diff → history → picker (when started without a file); direct-file mode focuses history from preview |
@@ -92,6 +93,25 @@ detection heuristics; snapshots use the name at the historical commit.
 Deleted-file snapshots and binary files show explanatory messages. Empty files
 are distinguished from deleted files. Content wraps to the terminal width and
 can be scrolled. Resize a very small terminal to see the full interface.
+
+## Large repositories
+
+History streams into the UI as Git produces results. You can inspect loaded
+commits while older history is still arriving; the footer shows progress.
+Returning to the picker or quitting cancels the traversal. If loading fails after
+some commits arrive, they remain available with a “History incomplete” message.
+
+Metadata and historical file paths come from one Git traversal, including rename
+statuses. Diff and snapshot results share an in-memory LRU per opened file,
+limited to 64 entries and 32 MiB of string payload. Reopening a file starts a new
+session. Diff/file views initially retain up to 2 MiB of output; press `L` to load
+the complete result explicitly. This limits retained output, not Git's work to
+compute it. Full output bypasses the content cache.
+
+Git still traverses history and detects renames, so complex repositories can take
+time before producing the first result. History is loaded progressively to
+completion, not paginated. See [performance notes](docs/performance.md) for the
+benchmark and regression checks.
 
 ## Development
 

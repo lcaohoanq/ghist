@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,7 +26,7 @@ type commandError struct {
 func (e *commandError) Error() string { return "Git " + e.operation + " failed" }
 func (e *commandError) Unwrap() error { return e.cause }
 
-func run(ctx context.Context, dir string, args ...string) ([]byte, error) {
+func gitCommand(ctx context.Context, dir string, args ...string) *exec.Cmd {
 	base := []string{"--no-pager", "--literal-pathspecs", "-c", "color.ui=false", "-c", "core.quotePath=false"}
 	cmd := exec.CommandContext(ctx, "git", append(base, args...)...)
 	cmd.Dir = dir
@@ -39,16 +40,45 @@ func run(ctx context.Context, dir string, args ...string) ([]byte, error) {
 		cmd.Env = append(cmd.Env, entry)
 	}
 	cmd.Env = append(cmd.Env, "LC_ALL=C", "GIT_OPTIONAL_LOCKS=0")
+	return cmd
+}
+
+func run(ctx context.Context, dir string, args ...string) ([]byte, error) {
+	var out bytes.Buffer
+	err := stream(ctx, dir, func(r io.Reader) error { _, err := io.Copy(&out, r); return err }, args...)
+	return out.Bytes(), err
+}
+
+// stream drains stdout before Wait, and always reaps Git, including on parser
+// failure or cancellation while a consumer is applying backpressure.
+func stream(ctx context.Context, dir string, consume func(io.Reader) error, args ...string) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cmd := gitCommand(ctx, dir, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	out, err := cmd.Output()
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err = cmd.Start(); err != nil {
+		return err
+	}
+	parseErr := consume(out)
+	if parseErr != nil {
+		cancel()
+	}
+	err = cmd.Wait()
+	if parseErr != nil {
+		return parseErr
+	}
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		return ctx.Err()
 	}
 	if err != nil {
-		return nil, &commandError{operation: args[0], detail: stderr.String(), cause: err}
+		return &commandError{operation: args[0], detail: stderr.String(), cause: err}
 	}
-	return out, nil
+	return nil
 }
 
 func Open(ctx context.Context, path string) (*Repository, error) {

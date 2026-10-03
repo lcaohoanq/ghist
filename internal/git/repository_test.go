@@ -12,7 +12,7 @@ import (
 	"github.com/lcaohoanq/ghist/internal/history"
 )
 
-func fixture(t *testing.T) string {
+func fixture(t testing.TB) string {
 	t.Helper()
 	dir := t.TempDir()
 	gitCmd(t, dir, "init", "-b", "main")
@@ -21,7 +21,7 @@ func fixture(t *testing.T) string {
 	gitCmd(t, dir, "config", "commit.gpgsign", "false")
 	return dir
 }
-func gitCmd(t *testing.T, dir string, args ...string) string {
+func gitCmd(t testing.TB, dir string, args ...string) string {
 	t.Helper()
 	c := exec.Command("git", args...)
 	c.Dir = dir
@@ -32,7 +32,7 @@ func gitCmd(t *testing.T, dir string, args ...string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
-func write(t *testing.T, dir, path, content string) {
+func write(t testing.TB, dir, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, path)), 0755); err != nil {
 		t.Fatal(err)
@@ -41,7 +41,7 @@ func write(t *testing.T, dir, path, content string) {
 		t.Fatal(err)
 	}
 }
-func commit(t *testing.T, dir, message string) string {
+func commit(t testing.TB, dir, message string) string {
 	t.Helper()
 	gitCmd(t, dir, "add", "-A")
 	gitCmd(t, dir, "commit", "-m", message)
