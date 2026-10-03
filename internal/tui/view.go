@@ -82,7 +82,11 @@ func (m Model) View() tea.View {
 	if m.mode == fileView {
 		mode = "File"
 	}
-	rows := []string{paint("1;36", "ghist") + " · " + paint("1", mode) + " · " + paint("36", single(m.path))}
+	renameMode := "Fast · Renames not followed"
+	if m.followRenames {
+		renameMode = "Following renames"
+	}
+	rows := []string{paint("1;36", "ghist") + " · " + paint("1", mode) + " · " + renameMode + " · " + paint("36", single(m.path))}
 	for i, line := range m.metadata() {
 		code := "90"
 		if i == 0 {

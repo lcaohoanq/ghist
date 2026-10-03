@@ -10,7 +10,8 @@ go vet ./...
 
 The benchmark builds one local repository with 120 file revisions, a rename,
 100 unrelated files and unrelated changes alongside each revision. Setup is
-excluded from timings. The legacy implementation is retained only in test code;
+excluded from timings. The benchmark explicitly enables rename tracking for both implementations.
+The legacy implementation is retained only in test code;
 its complete history must equal the new implementation's result before timing.
 
 Sample on an Intel i5-11400H, Linux amd64 (three iterations, warm local storage):
@@ -26,10 +27,11 @@ memory. These are synthetic measurements, not a promise for another repository.
 
 ## Implementation
 
-- One `git log --follow --name-status -z` supplies metadata and paths. Metadata
+- One `git log --name-status -z` supplies metadata and paths. Fast mode explicitly
+  uses `--no-follow --no-renames`; `--follow` mode enables `--follow -M`. Metadata
   and rename path tokens are parsed positionally, preserving unusual filenames.
-- The captured HEAD, topological ordering, rename detection and first-parent diff
-  convention remain. Git determines file-history traversal; this is not a custom
+- The captured HEAD, topological ordering and first-parent diff convention remain.
+  Rename detection is opt-in. Fast mode intentionally omits history under old paths. Git determines file-history traversal; this is not a custom
   traversal of every possible rename lineage through a merge graph.
 - The first version is sent immediately. Later UI batches contain up to 64
   versions, with partial batches flushed every 40 ms. The queues are bounded.

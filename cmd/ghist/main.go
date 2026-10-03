@@ -16,10 +16,11 @@ import (
 
 const usage = `ghist — explore how a file evolved
 
-Usage: ghist [--] [<file>]
+Usage: ghist [--follow] [--] [<file>]
        ghist --help
 
-Explore committed history from HEAD, following file renames.
+Explore committed history from HEAD at the current path (fast, no rename search).
+Use --follow to include history across file renames; this can be much slower.
 Without a file, fuzzy-find a file in HEAD using fzf (Enter selects; Esc cancels).
 Esc from History returns to the picker when no file argument was given.
 Paths are relative to your current directory; absolute paths also work.
@@ -29,23 +30,32 @@ Keys: ↑/↓ or j/k select, Enter inspect, d diff, f file,
       p older, n newer, Esc back, q or Ctrl+C quit.
 `
 
-func parseArgs(args []string, out io.Writer) (string, error) {
+type options struct {
+	path   string
+	follow bool
+}
+
+func parseArgs(args []string, out io.Writer) (options, error) {
+	var opts options
 	flags := flag.NewFlagSet("ghist", flag.ContinueOnError)
+	flags.BoolVar(&opts.follow, "follow", false, "follow file renames (can be slow on large repositories)")
 	flags.SetOutput(out)
 	flags.Usage = func() { fmt.Fprint(out, usage) }
 	if err := flags.Parse(args); err != nil {
-		return "", err
+		return options{}, err
 	}
 	if flags.NArg() > 1 {
-		return "", errors.New("expected at most one file path; usage: ghist [--] [<file>]")
+		return options{}, errors.New("expected at most one file path; usage: ghist [--] [<file>]")
 	}
 	if flags.NArg() == 1 && flags.Arg(0) == "" {
-		return "", errors.New("file path must not be empty")
+		return options{}, errors.New("file path must not be empty")
 	}
-	return flags.Arg(0), nil
+	opts.path = flags.Arg(0)
+	return opts, nil
 }
 func run(args []string) error {
-	path, err := parseArgs(args, os.Stdout)
+	opts, err := parseArgs(args, os.Stdout)
+	path := opts.path
 	if errors.Is(err, flag.ErrHelp) {
 		return nil
 	}
@@ -65,7 +75,8 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		model := tui.New(ctx, history.NewService(repo), repo.Path)
+		repo.FollowRenames = opts.follow
+		model := tui.New(ctx, history.NewService(repo), repo.Path).WithFollowRenames(opts.follow)
 		if path == "" {
 			model = model.WithPicker()
 		}

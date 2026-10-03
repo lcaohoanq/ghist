@@ -49,8 +49,11 @@ func run() error {
 		_ = unix.IoctlSetPointerInt(fd, unix.TIOCSPGRP, foreground)
 	}()
 	var args []string
+	if os.Getenv("FOLLOW") == "1" {
+		args = append(args, "--follow")
+	}
 	if path != "" {
-		args = []string{"--", path}
+		args = append(args, "--", path)
 	}
 	// Resolve the development binary before changing the child's directory.
 	bin, err := filepath.Abs("./tmp/ghist")

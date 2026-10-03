@@ -63,3 +63,16 @@ func TestHistoryColumnsStayAligned(t *testing.T) {
 		t.Fatal("scrolling changed columns")
 	}
 }
+
+func TestHistoryModeLabel(t *testing.T) {
+	m := ready()
+	defer m.stop()
+	m.width = 140
+	if !strings.Contains(m.View().Content, "Renames not followed") {
+		t.Fatal("missing fast-mode scope")
+	}
+	m = m.WithFollowRenames(true)
+	if !strings.Contains(m.View().Content, "Following renames") || strings.Contains(m.View().Content, "Renames not followed") {
+		t.Fatal("wrong follow-mode label")
+	}
+}
