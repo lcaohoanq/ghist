@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/charmbracelet/x/term"
@@ -51,7 +52,13 @@ func run() error {
 	if path != "" {
 		args = []string{"--", path}
 	}
-	cmd := exec.Command("./tmp/ghist", args...)
+	// Resolve the development binary before changing the child's directory.
+	bin, err := filepath.Abs("./tmp/ghist")
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = os.Getenv("PROJECT")
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = tty, tty, tty
 	if err = cmd.Start(); err != nil {
 		return err
