@@ -4,15 +4,56 @@
 
 Explore how a file evolved, directly from your terminal.
 
+## Installation
+
+Install [Go 1.26+](https://go.dev/dl/) and [Git](https://git-scm.com/downloads), then
+run the same commands on Linux, macOS, WSL, or **Git Bash on Windows**:
+
 ```sh
-go mod tidy
-go build -o bin/ghist ./cmd/ghist
-./bin/ghist path/to/file.go
+git clone --depth 1 --branch develop https://github.com/lcaohoanq/ghist.git ~/.ghist
+~/.ghist/install
 ```
 
-Requires Go 1.26+ to build, Git (core tests run with 2.55), and an interactive terminal. Run
-`go mod tidy` to download dependencies before the first build. No remote Git
-service, credentials, or network connection is needed at runtime.
+The installer is currently available on the `develop` branch.
+
+The installer builds the checked-out source for your OS and CPU, downloads Go
+dependencies as needed, and installs `ghist` into `~/.local/bin` (`ghist.exe` on
+Windows). It needs neither Air nor sudo, and does not edit shell profiles. On
+Windows, use Git Bash for these installation commands, not PowerShell or cmd.exe.
+
+If that directory is not on PATH, add this to your shell configuration:
+
+```sh
+# bash, zsh, or Git Bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+For fish, use `fish_add_path "$HOME/.local/bin"`. Then run `ghist --help`.
+Choose another destination with `~/.ghist/install --bin-dir /path/to/bin`.
+
+Update an existing installation:
+
+```sh
+git -C ~/.ghist pull --ff-only
+~/.ghist/install
+```
+
+The installed version follows your checkout. To install the release **before Fast
+mode**, clone its tag instead (into a separate directory):
+
+```sh
+git clone --depth 1 --branch v0.1.0 https://github.com/lcaohoanq/ghist.git ~/.ghist-v0.1.0
+```
+
+That historical tag predates this installer. For it, use the prebuilt binaries
+from [GitHub Releases](https://github.com/lcaohoanq/ghist/releases/tag/v0.1.0), or
+build inside its checkout with `go build -o ghist ./cmd/ghist`. The v0.1.0 release
+always follows renames and does not have the `--follow` option described below.
+
+Running ghist requires Git (core tests use 2.55) and an interactive terminal.
+[fzf](https://github.com/junegunn/fzf#installation) is optional for file selection;
+passing a file works without it. No remote Git service, credentials, or network
+connection is needed to load history.
 
 ## Usage
 
