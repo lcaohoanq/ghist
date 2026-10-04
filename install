@@ -1,0 +1,81 @@
+#!/bin/sh
+# Install the checked-out source on any platform supported by Go and a POSIX shell.
+set -eu
+
+usage() {
+  cat <<'EOF'
+Usage: ./install [--bin-dir DIRECTORY]
+
+Build this checkout and install ghist (requires Go 1.26+).
+Default destination: $HOME/.local/bin
+Works on Linux, macOS, WSL, and Windows with Git Bash.
+No sudo or shell-profile changes are performed.
+EOF
+}
+
+bin_dir=${GHIST_BIN_DIR:-"$HOME/.local/bin"}
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --bin-dir)
+      [ "$#" -ge 2 ] && [ -n "$2" ] || { echo 'Missing directory after --bin-dir' >&2; exit 2; }
+      bin_dir=$2
+      shift 2
+      ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+command -v go >/dev/null 2>&1 || {
+  echo 'Go 1.26+ is required. Install it from https://go.dev/dl/ and rerun this installer.' >&2
+  exit 1
+}
+
+# Resolve the destination before changing directory. Quote paths throughout so
+# clone/install directories containing spaces work too.
+case "$bin_dir" in
+  /*) ;;
+  *) bin_dir="$(pwd)/$bin_dir" ;;
+esac
+source_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$source_dir"
+[ -f go.mod ] && [ -f cmd/ghist/main.go ] || {
+  echo 'Run install from a complete ghist checkout.' >&2
+  exit 1
+}
+
+# Install for the host even if the shell has cross-compilation variables set.
+host_os=$(go env GOHOSTOS)
+host_arch=$(go env GOHOSTARCH)
+binary=ghist
+[ "$host_os" != windows ] || binary=ghist.exe
+
+mkdir -p "$bin_dir"
+# Stage on the destination filesystem, so a failed build preserves the installed
+# binary and the final rename is atomic. mktemp works on macOS and Git Bash too.
+stage=$(mktemp -d "$bin_dir/.ghist-install.XXXXXXXX")
+trap 'rm -rf -- "$stage"' 0
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+
+printf 'Building ghist for %s/%s...\n' "$host_os" "$host_arch"
+GOOS="$host_os" GOARCH="$host_arch" CGO_ENABLED=0 go build -trimpath -o "$stage/$binary" ./cmd/ghist
+chmod 755 "$stage/$binary"
+mv -f -- "$stage/$binary" "$bin_dir/$binary"
+printf 'Installed: %s/%s\n' "$bin_dir" "$binary"
+
+case ":${PATH:-}:" in
+  *":$bin_dir:"*) echo 'Run: ghist --help' ;;
+  *)
+    printf '\nAdd this directory to PATH in your shell configuration:\n  %s\n' "$bin_dir"
+    if [ "$bin_dir" = "$HOME/.local/bin" ]; then
+      printf '%s\n' 'For bash/zsh/Git Bash: export PATH="$HOME/.local/bin:$PATH"' 'For fish: fish_add_path "$HOME/.local/bin"'
+    fi
+    ;;
+esac
+if ! command -v git >/dev/null 2>&1; then
+  echo 'Install Git before running ghist.'
+fi
+if ! command -v fzf >/dev/null 2>&1; then
+  echo 'Optional: install fzf to use the file picker. Passing a file works without fzf.'
+fi

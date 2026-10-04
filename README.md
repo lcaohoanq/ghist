@@ -4,15 +4,56 @@
 
 Explore how a file evolved, directly from your terminal.
 
+## Installation
+
+Install [Go 1.26+](https://go.dev/dl/) and [Git](https://git-scm.com/downloads), then
+run the same commands on Linux, macOS, WSL, or **Git Bash on Windows**:
+
 ```sh
-go mod tidy
-go build -o bin/ghist ./cmd/ghist
-./bin/ghist path/to/file.go
+git clone --depth 1 --branch develop https://github.com/lcaohoanq/ghist.git ~/.ghist
+~/.ghist/install
 ```
 
-Requires Go 1.26+ to build, Git (core tests run with 2.55), and an interactive terminal. Run
-`go mod tidy` to download dependencies before the first build. No remote Git
-service, credentials, or network connection is needed at runtime.
+The installer is currently available on the `develop` branch.
+
+The installer builds the checked-out source for your OS and CPU, downloads Go
+dependencies as needed, and installs `ghist` into `~/.local/bin` (`ghist.exe` on
+Windows). It needs neither Air nor sudo, and does not edit shell profiles. On
+Windows, use Git Bash for these installation commands, not PowerShell or cmd.exe.
+
+If that directory is not on PATH, add this to your shell configuration:
+
+```sh
+# bash, zsh, or Git Bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+For fish, use `fish_add_path "$HOME/.local/bin"`. Then run `ghist --help`.
+Choose another destination with `~/.ghist/install --bin-dir /path/to/bin`.
+
+Update an existing installation:
+
+```sh
+git -C ~/.ghist pull --ff-only
+~/.ghist/install
+```
+
+The installed version follows your checkout. To install the release **before Fast
+mode**, clone its tag instead (into a separate directory):
+
+```sh
+git clone --depth 1 --branch v0.1.0 https://github.com/lcaohoanq/ghist.git ~/.ghist-v0.1.0
+```
+
+That historical tag predates this installer. For it, use the prebuilt binaries
+from [GitHub Releases](https://github.com/lcaohoanq/ghist/releases/tag/v0.1.0), or
+build inside its checkout with `go build -o ghist ./cmd/ghist`. Both v0.1.0 and the
+current develop branch follow renames by default; no `--follow` flag is needed.
+
+Running ghist requires Git (core tests use 2.55) and an interactive terminal.
+[fzf](https://github.com/junegunn/fzf#installation) is optional for file selection;
+passing a file works without it. No remote Git service, credentials, or network
+connection is needed to load history.
 
 ## Usage
 
@@ -55,6 +96,7 @@ not included. The tool never checks out a revision or modifies your repository.
 | `←`, `→` | Collapse / expand the focused day group |
 | `d`, `f` | Open diff or full file |
 | `s` | Toggle split/unified diff (split requires 100 columns in the diff panel) |
+| `L` | Load full output when a diff or file exceeds the initial 2 MiB limit |
 | `p`, `n` | Older / newer file version |
 | `PgUp`, `PgDn`, `Home`, `End` | Page / jump in the list or content |
 | `Esc` | File → diff → history → picker (when started without a file); direct-file mode focuses history from preview |
@@ -92,6 +134,28 @@ detection heuristics; snapshots use the name at the historical commit.
 Deleted-file snapshots and binary files show explanatory messages. Empty files
 are distinguished from deleted files. Content wraps to the terminal width and
 can be scrolled. Resize a very small terminal to see the full interface.
+
+## Large repositories
+
+History streams into the UI as Git produces results. You can inspect loaded
+commits while older history is still arriving; the footer shows progress. Once
+the entire history finishes loading, it shows the commit count and total fetch
+time (for example, `Fetched 120 commits in 1.234s`). This measures history loading,
+including delivery of streamed batches, and does not wait for diff previews.
+Returning to the picker or quitting cancels the traversal. If loading fails after
+some commits arrive, they remain available with a “History incomplete” message.
+
+Metadata and historical file paths come from one Git traversal, including rename
+statuses. Diff and snapshot results share an in-memory LRU per opened file,
+limited to 64 entries and 32 MiB of string payload. Reopening a file starts a new
+session. Diff/file views initially retain up to 2 MiB of output; press `L` to load
+the complete result explicitly. This limits retained output, not Git's work to
+compute it. Full output bypasses the content cache.
+
+Git still traverses history and detects renames, so complex repositories can take
+time before producing the first result. History is loaded progressively to
+completion, not paginated. See [performance notes](docs/performance.md) for the
+benchmark and regression checks.
 
 ## Development
 

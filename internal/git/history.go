@@ -1,8 +1,10 @@
 package git
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -11,89 +13,117 @@ import (
 
 func (r *Repository) FileHistory(ctx context.Context) (history.FileHistory, error) {
 	result := history.FileHistory{Path: r.Path, Head: r.Head}
-	out, err := run(ctx, r.Root, "log", "--follow", "-M", "--no-show-signature", "--diff-merges=first-parent", "--no-patch", "--topo-order", "--format=%H%x00%P%x00%an%x00%ae%x00%aI%x00%s", "-z", r.Head, "--", r.Path)
-	if err != nil {
-		return result, err
-	}
-	if len(out) == 0 {
-		return result, history.ErrNoHistory
-	}
-	fields := strings.Split(strings.TrimSuffix(string(out), "\x00"), "\x00")
-	if len(fields)%6 != 0 {
-		return result, fmt.Errorf("invalid Git history response")
-	}
-	path := r.Path
-	for i := 0; i < len(fields); i += 6 {
-		date, err := time.Parse(time.RFC3339, fields[i+4])
-		if err != nil {
-			return result, fmt.Errorf("invalid commit date: %w", err)
-		}
-		hash := fields[i]
-		if len(hash) < 7 {
-			return result, fmt.Errorf("invalid commit hash")
-		}
-		parents := strings.Fields(fields[i+1])
-		v := history.FileVersion{Commit: history.Commit{Hash: hash, ShortHash: hash[:7], Author: fields[i+2], Email: fields[i+3], Date: date, Subject: fields[i+5]}, Merge: len(parents) > 1, BeforePath: path, AfterPath: path, Change: "M"}
-		if len(parents) > 0 {
-			v.Parent = parents[0]
-		}
-		args := []string{"diff-tree", "--no-commit-id", "--root", "-r", "-M", "--no-ext-diff", "--no-textconv", "--name-status", "-z"}
-		if v.Parent != "" {
-			args = append(args, v.Parent)
-		}
-		args = append(args, hash, "--")
-		changes, err := run(ctx, r.Root, args...)
-		if err != nil {
-			return result, err
-		}
-		entries, err := parseChanges(changes)
-		if err != nil {
-			return result, err
-		}
-		for _, c := range entries {
-			if c.after == path || (c.after == "" && c.before == path) {
-				v.BeforePath, v.AfterPath, v.Change = c.before, c.after, c.status
-				if c.before != "" {
-					path = c.before
-				}
-				break
-			}
-		}
+	err := r.StreamHistory(ctx, func(v history.FileVersion) error {
 		result.Versions = append(result.Versions, v)
-	}
-	return result, nil
+		return nil
+	})
+	return result, err
 }
 
-type change struct{ status, before, after string }
-
-func parseChanges(data []byte) ([]change, error) {
-	if len(data) == 0 {
-		return nil, nil
+// StreamHistory obtains metadata and historical paths in one Git traversal.
+// Paths come from each record, rather than a mutable path shared by branches.
+func (r *Repository) StreamHistory(ctx context.Context, emit func(history.FileVersion) error) error {
+	count := 0
+	err := stream(ctx, r.Root, func(reader io.Reader) error {
+		return parseHistory(reader, r.Path, func(v history.FileVersion) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			count++
+			return emit(v)
+		})
+	}, "log", "--root", "--no-notes", "--follow", "-M", "--no-show-signature", "--diff-merges=first-parent",
+		"--name-status", "--no-ext-diff", "--no-textconv", "--topo-order",
+		"--format=%x00%H%x00%P%x00%an%x00%ae%x00%aI%x00%s", "-z", r.Head, "--", r.Path)
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
-	tokens := strings.Split(strings.TrimSuffix(string(data), "\x00"), "\x00")
-	var result []change
-	for i := 0; i < len(tokens); {
-		status := tokens[i]
-		i++
-		if status == "" || i >= len(tokens) {
-			return nil, fmt.Errorf("invalid Git change response")
+	if err == nil && count == 0 {
+		return history.ErrNoHistory
+	}
+	return err
+}
+
+// NUL framing preserves tabs/newlines in paths. Metadata fields are consumed
+// positionally, so a subject or filename resembling a hash is never a header.
+func parseHistory(reader io.Reader, fallbackPath string, emit func(history.FileVersion) error) error {
+	readerBuf := bufio.NewReader(reader)
+	token := func() (string, error) {
+		s, err := readerBuf.ReadString(0)
+		if err != nil {
+			if err == io.EOF && s != "" {
+				return "", io.ErrUnexpectedEOF
+			}
+			return "", err
 		}
-		path := tokens[i]
-		i++
-		c := change{status: status, before: path, after: path}
+		return strings.TrimSuffix(s, "\x00"), nil
+	}
+	var current *history.FileVersion
+	flush := func() error {
+		if current == nil {
+			return nil
+		}
+		return emit(*current)
+	}
+	for {
+		s, err := token()
+		if err == io.EOF {
+			return flush()
+		}
+		if err != nil {
+			return err
+		}
+		if s == "" {
+			continue
+		}
+		if objectID.MatchString(s) {
+			if err := flush(); err != nil {
+				return err
+			}
+			fields := make([]string, 5)
+			for i := range fields {
+				fields[i], err = token()
+				if err != nil {
+					return fmt.Errorf("invalid Git history metadata: %w", err)
+				}
+			}
+			date, err := time.Parse(time.RFC3339, fields[3])
+			if err != nil {
+				return fmt.Errorf("invalid commit date: %w", err)
+			}
+			parents := strings.Fields(fields[0])
+			current = &history.FileVersion{
+				Commit: history.Commit{Hash: s, ShortHash: s[:7], Author: fields[1], Email: fields[2], Date: date, Subject: fields[4]},
+				Merge:  len(parents) > 1, BeforePath: fallbackPath, AfterPath: fallbackPath, Change: "M",
+			}
+			if len(parents) > 0 {
+				current.Parent = parents[0]
+			}
+			continue
+		}
+		if current == nil {
+			return fmt.Errorf("Git history change without commit")
+		}
+		status := strings.TrimPrefix(s, "\n")
+		if status == "" || !strings.ContainsRune("AMDRCTUXB", rune(status[0])) {
+			return fmt.Errorf("invalid Git history status")
+		}
+		path, err := token()
+		if err != nil {
+			return fmt.Errorf("invalid Git history path: %w", err)
+		}
+		before, after := path, path
 		switch status[0] {
 		case 'A':
-			c.before = ""
+			before = ""
 		case 'D':
-			c.after = ""
+			after = ""
 		case 'R', 'C':
-			if i >= len(tokens) {
-				return nil, fmt.Errorf("invalid Git rename response")
+			after, err = token()
+			if err != nil {
+				return fmt.Errorf("invalid Git rename path: %w", err)
 			}
-			c.after = tokens[i]
-			i++
 		}
-		result = append(result, c)
+		current.BeforePath, current.AfterPath, current.Change = before, after, status
 	}
-	return result, nil
 }

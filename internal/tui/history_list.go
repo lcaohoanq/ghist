@@ -10,6 +10,36 @@ type historyRow struct {
 }
 
 func (m Model) historyRows() []historyRow {
+	if m.renderCache == nil || len(m.history.Versions) == 0 {
+		return m.buildHistoryRows()
+	}
+	c := m.renderCache
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	first := &m.history.Versions[0]
+	// Append batches incrementally, including a day group split across batches.
+	// Rebuild only when collapse state changes or a different history replaces it.
+	if c.first == nil || *c.first != *first || c.count > len(m.history.Versions) || c.collapseRevision != m.collapseRevision {
+		c.rows = nil
+		c.count = 0
+		c.lastHeader = 0
+	}
+	for i := c.count; i < len(m.history.Versions); i++ {
+		day := m.history.Versions[i].Commit.Date.Format("2006-01-02")
+		if len(c.rows) == 0 || m.history.Versions[c.rows[c.lastHeader].group].Commit.Date.Format("2006-01-02") != day {
+			c.lastHeader = len(c.rows)
+			c.rows = append(c.rows, historyRow{group: i, header: true})
+		}
+		c.rows[c.lastHeader].count++
+		group := c.rows[c.lastHeader].group
+		if !m.collapsed[group] {
+			c.rows = append(c.rows, historyRow{group: group, version: i})
+		}
+	}
+	c.first, c.count, c.collapseRevision = first, len(m.history.Versions), m.collapseRevision
+	return c.rows
+}
+func (m Model) buildHistoryRows() []historyRow {
 	var rows []historyRow
 	for start := 0; start < len(m.history.Versions); {
 		day := m.history.Versions[start].Commit.Date.Format("2006-01-02")
@@ -63,6 +93,7 @@ func (m *Model) setGroupCollapsed(group int, collapsed bool) {
 	}
 	next[group] = collapsed
 	m.collapsed = next
+	m.collapseRevision++
 }
 
 func (m *Model) toggleHistoryGroup(key string) {

@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/lcaohoanq/ghist/internal/history"
@@ -26,7 +27,14 @@ const (
 type Model struct {
 	pickerEnabled, backToPicker     bool
 	historyCursor, historyOffset    int
+	historyEvents                   chan historyBatchMsg
+	historyLoading                  bool
+	historyComplete                 bool
+	historyElapsed                  time.Duration
+	historyErr                      error
+	renderCache                     *renderCache
 	collapsed                       map[int]bool
+	collapseRevision                uint64
 	preview                         previewState
 	previewFocus                    bool
 	diffUnified                     bool
@@ -45,6 +53,7 @@ type Model struct {
 }
 
 type historyMsg struct {
+	elapsed time.Duration
 	history history.FileHistory
 	err     error
 }
@@ -56,7 +65,7 @@ type contentMsg struct {
 
 func New(ctx context.Context, service Explorer, path string) Model {
 	ctx, stop := context.WithCancel(ctx)
-	return Model{ctx: ctx, stop: stop, service: service, path: path, width: 80, height: 24, loading: true, historyCursor: 1}
+	return Model{historyEvents: make(chan historyBatchMsg, 1), renderCache: &renderCache{}, ctx: ctx, stop: stop, service: service, path: path, width: 80, height: 24, loading: true, historyCursor: 1}
 }
 
 // WithPicker enables returning to file selection with Esc from History.
@@ -69,9 +78,16 @@ func (m Model) WithPicker() Model {
 func (m Model) BackToPicker() bool { return m.backToPicker }
 
 func (m Model) Init() tea.Cmd {
+	if source, ok := m.service.(history.HistoryStreamer); ok {
+		return func() tea.Msg {
+			go streamHistory(m.ctx, source, m.historyEvents)
+			return m.awaitHistory()()
+		}
+	}
 	return func() tea.Msg {
+		started := time.Now()
 		h, err := m.service.ExploreFile(m.ctx)
-		return historyMsg{h, err}
+		return historyMsg{history: h, err: err, elapsed: time.Since(started)}
 	}
 }
 func (m *Model) invalidate() {
@@ -82,7 +98,8 @@ func (m *Model) invalidate() {
 	m.request++
 	m.loading = false
 }
-func (m *Model) load(mode viewMode) tea.Cmd {
+func (m *Model) load(mode viewMode) tea.Cmd { return m.loadContent(mode, false) }
+func (m *Model) loadContent(mode viewMode, full bool) tea.Cmd {
 	if len(m.history.Versions) == 0 {
 		return nil
 	}
@@ -100,13 +117,28 @@ func (m *Model) load(mode viewMode) tea.Cmd {
 	return func() tea.Msg {
 		defer cancel()
 		if mode == diffView {
-			d, err := service.GetDiff(ctx, version)
+			var d history.FileDiff
+			var err error
+			if source, ok := service.(fullExplorer); full && ok {
+				d, err = source.GetFullDiff(ctx, version)
+			} else {
+				d, err = service.GetDiff(ctx, version)
+			}
+			if d.Truncated {
+				d.Patch = limitedNotice + d.Patch
+			}
 			if err == nil && d.Patch == "" {
 				d.Patch = "No changes relative to the first parent."
 			}
 			return contentMsg{id, d.Patch, err}
 		}
-		s, err := service.GetSnapshot(ctx, version)
+		var s history.FileSnapshot
+		var err error
+		if source, ok := service.(fullExplorer); full && ok {
+			s, err = source.GetFullSnapshot(ctx, version)
+		} else {
+			s, err = service.GetSnapshot(ctx, version)
+		}
 		text := s.Content
 		if err == nil {
 			switch {
@@ -117,6 +149,9 @@ func (m *Model) load(mode viewMode) tea.Cmd {
 			case s.Content == "":
 				text = "Empty file."
 			}
+		}
+		if s.Truncated && !s.Binary {
+			text = limitedNotice + text
 		}
 		return contentMsg{id, text, err}
 	}
@@ -152,7 +187,39 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := m.schedulePreview()
 			return m, cmd
 		}
+	case historyBatchMsg:
+		if m.ctx.Err() != nil {
+			return m, nil
+		}
+		first := len(m.history.Versions) == 0
+		m.historyLoading = !msg.done
+		m.historyComplete = msg.done && msg.err == nil
+		m.historyElapsed = msg.elapsed
+		m.historyErr = msg.err
+		m.history.Versions = append(m.history.Versions, msg.versions...)
+		if m.mode == historyView {
+			m.loading = len(m.history.Versions) == 0 && !msg.done
+		}
+		var preview tea.Cmd
+		if first && len(m.history.Versions) > 0 {
+			m.revealSelected()
+			preview = m.schedulePreview()
+		}
+		if msg.done {
+			if len(m.history.Versions) == 0 && msg.err == nil {
+				m.historyErr = history.ErrNoHistory
+			}
+			return m, preview
+		}
+		return m, tea.Batch(m.awaitHistory(), preview)
 	case historyMsg:
+		if m.ctx.Err() != nil {
+			return m, nil
+		}
+		m.historyComplete = msg.err == nil && len(msg.history.Versions) > 0
+		m.historyElapsed = msg.elapsed
+		m.historyLoading = false
+		m.renderCache = &renderCache{}
 		m.loading = false
 		m.history = msg.history
 		m.selected = 0
@@ -242,6 +309,13 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 			cmd := m.load(fileView)
 			return m, cmd
 		}
+	case "L":
+		mode := m.mode
+		if mode == historyView {
+			mode = diffView
+		}
+		cmd := m.loadContent(mode, true)
+		return m, cmd
 	case "d":
 		cmd := m.load(diffView)
 		return m, cmd
@@ -335,4 +409,11 @@ func (m Model) metadata() []string {
 		fmt.Sprintf("%s <%s>  %s", c.Author, c.Email, c.Date.Format("02-01-2006 15:04:05 -07:00")),
 		fmt.Sprintf("%s | %s | version %d/%d", v.Path(), parent, m.selected+1, len(m.history.Versions)),
 	}
+}
+
+const limitedNotice = "Output limited to 2 MiB. Press L to load full output.\n"
+
+type fullExplorer interface {
+	GetFullDiff(context.Context, history.FileVersion) (history.FileDiff, error)
+	GetFullSnapshot(context.Context, history.FileVersion) (history.FileSnapshot, error)
 }

@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -26,10 +27,7 @@ func safe(s string) string {
 }
 func single(s string) string { return strings.ReplaceAll(safe(s), "\n", " ") }
 func (m Model) lines() []string {
-	if m.mode == diffView {
-		return renderDiff(m.content, m.width, m.diffUnified)
-	}
-	return strings.Split(ansi.Hardwrap(safe(m.content), max(1, m.width), true), "\n")
+	return m.cachedLines(m.content, m.width, m.mode != diffView, false)
 }
 
 // Styles use the terminal's palette so they adapt to its light/dark theme.
@@ -47,10 +45,7 @@ type historyColumns struct {
 
 func (m Model) columns() historyColumns {
 	// Measure the entire history so scrolling never shifts the message column.
-	author := 6
-	for _, v := range m.history.Versions {
-		author = max(author, ansi.StringWidth(single(v.Commit.Author)))
-	}
+	author := m.historyAuthorWidth()
 	width := m.listWidth()
 	showDate := width >= 60
 	fixed := 15 // selection, hash and column spacing
@@ -117,6 +112,8 @@ func (m Model) View() tea.View {
 	switch {
 	case m.loading:
 		body = []string{paint("33", "Loading…")}
+	case m.mode == historyView && m.historyErr != nil && len(m.history.Versions) == 0:
+		body = []string{paint("31", "Error: "+single(m.historyErr.Error()))}
 	case m.err != nil:
 		body = []string{paint("31", "Error: "+single(m.err.Error()))}
 	case m.mode == historyView:
@@ -178,6 +175,14 @@ func (m Model) View() tea.View {
 	}
 	if m.mode != historyView {
 		help = "↑↓/jk/PgUp/PgDn scroll · s split/unified · d diff · f file · p/n version · Esc back · q quit"
+	}
+	if m.historyLoading {
+		help = fmt.Sprintf("Loaded %d commits · loading more… · ", len(m.history.Versions)) + help
+	} else if m.historyComplete && m.historyErr == nil {
+		help = fmt.Sprintf("Fetched %d commits in %s · ", len(m.history.Versions), m.historyElapsed.Round(time.Millisecond)) + help
+	}
+	if m.historyErr != nil && len(m.history.Versions) > 0 {
+		help = "History incomplete: " + single(m.historyErr.Error()) + " · " + help
 	}
 	rows = append(rows, paint("36", help))
 	for i := range rows {
