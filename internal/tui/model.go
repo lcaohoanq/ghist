@@ -25,7 +25,6 @@ const (
 )
 
 type Model struct {
-	followRenames                   bool
 	pickerEnabled, backToPicker     bool
 	historyCursor, historyOffset    int
 	historyEvents                   chan historyBatchMsg
@@ -418,6 +417,3 @@ type fullExplorer interface {
 	GetFullDiff(context.Context, history.FileVersion) (history.FileDiff, error)
 	GetFullSnapshot(context.Context, history.FileVersion) (history.FileSnapshot, error)
 }
-
-// WithFollowRenames labels the traversal mode configured on the repository.
-func (m Model) WithFollowRenames(follow bool) Model { m.followRenames = follow; return m }

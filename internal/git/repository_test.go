@@ -53,7 +53,6 @@ func explore(t *testing.T, path string) (*Repository, history.FileHistory) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r.FollowRenames = true
 	h, err := r.FileHistory(context.Background())
 	if err != nil {
 		t.Fatal(err)

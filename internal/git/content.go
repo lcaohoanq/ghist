@@ -63,12 +63,7 @@ func (r *Repository) diff(ctx context.Context, v history.FileVersion, full bool)
 	if err := validVersion(v); err != nil {
 		return result, err
 	}
-	args := []string{"diff-tree", "--root", "--no-commit-id", "-r", "-p", "--no-ext-diff", "--no-textconv"}
-	if r.FollowRenames {
-		args = append(args, "-M")
-	} else {
-		args = append(args, "--no-renames")
-	}
+	args := []string{"diff-tree", "--root", "--no-commit-id", "-r", "-p", "-M", "--no-ext-diff", "--no-textconv"}
 	if v.Parent != "" {
 		args = append(args, v.Parent)
 	}

@@ -12,6 +12,6 @@ check:
 # Example: make dev FILE=internal/tui/view.go
 # Example: make dev PROJECT=/path/to/repo FILE=src/main.go
 .PHONY: dev
-export FILE PROJECT FOLLOW
+export FILE PROJECT
 dev:
 	air -c .air.toml

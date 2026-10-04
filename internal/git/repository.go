@@ -15,10 +15,7 @@ import (
 	"github.com/lcaohoanq/ghist/internal/history"
 )
 
-type Repository struct {
-	Root, Path, Head string
-	FollowRenames    bool
-}
+type Repository struct{ Root, Path, Head string }
 
 // commandError preserves Git diagnostics without displaying them in the TUI.
 type commandError struct {

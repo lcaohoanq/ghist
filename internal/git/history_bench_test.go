@@ -87,7 +87,6 @@ func BenchmarkFileHistory(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	r.FollowRenames = true
 	before, err := r.legacyFileHistory(context.Background())
 	if err != nil {
 		b.Fatal(err)

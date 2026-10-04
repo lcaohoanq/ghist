@@ -47,8 +47,8 @@ git clone --depth 1 --branch v0.1.0 https://github.com/lcaohoanq/ghist.git ~/.gh
 
 That historical tag predates this installer. For it, use the prebuilt binaries
 from [GitHub Releases](https://github.com/lcaohoanq/ghist/releases/tag/v0.1.0), or
-build inside its checkout with `go build -o ghist ./cmd/ghist`. The v0.1.0 release
-always follows renames and does not have the `--follow` option described below.
+build inside its checkout with `go build -o ghist ./cmd/ghist`. Both v0.1.0 and the
+current develop branch follow renames by default; no `--follow` flag is needed.
 
 Running ghist requires Git (core tests use 2.55) and an interactive terminal.
 [fzf](https://github.com/junegunn/fzf#installation) is optional for file selection;
@@ -59,9 +59,7 @@ connection is needed to load history.
 
 ```sh
 ghist                            # fuzzy-find a file, then Enter to open history
-ghist internal/order/service.go       # fast: history at the current path
-ghist --follow internal/order/service.go # include history before renames
-ghist --follow                       # picker with rename tracking
+ghist internal/order/service.go
 ghist /absolute/path/to/repo/file.go
 ghist -- -filename
 ghist --help
@@ -130,12 +128,8 @@ continuations use `↪` and stay aligned across the two sides.
 
 Diffs compare a commit with its first parent, or an empty tree for the root
 commit. Merge commits are labeled accordingly. Previous/next follows the file
-history list, not the commit's parent pointer. By default, history stays at the
-selected path and rename detection is disabled. History before a rename is not
-followed; a rename into this path appears as an addition. Use `--follow` to track
-renames with Git's heuristics and read snapshots at their historical paths. The
-header shows `Fast · Renames not followed` or `Following renames`. Place `--follow`
-before the file argument; it also applies to files selected through the picker.
+history list, not the commit's parent pointer. File renames follow Git's rename
+detection heuristics; snapshots use the name at the historical commit.
 
 Deleted-file snapshots and binary files show explanatory messages. Empty files
 are distinguished from deleted files. Content wraps to the terminal width and
@@ -151,16 +145,15 @@ including delivery of streamed batches, and does not wait for diff previews.
 Returning to the picker or quitting cancels the traversal. If loading fails after
 some commits arrive, they remain available with a “History incomplete” message.
 
-Metadata and historical file paths come from one Git traversal. Rename statuses
-are requested only with `--follow`. Diff and snapshot results share an in-memory LRU per opened file,
+Metadata and historical file paths come from one Git traversal, including rename
+statuses. Diff and snapshot results share an in-memory LRU per opened file,
 limited to 64 entries and 32 MiB of string payload. Reopening a file starts a new
 session. Diff/file views initially retain up to 2 MiB of output; press `L` to load
 the complete result explicitly. This limits retained output, not Git's work to
 compute it. Full output bypasses the content cache.
 
-Git still traverses history; `--follow` additionally detects renames and can be
-much slower on large repositories. Fast mode keeps topological ordering while
-disabling rename detection, even if Git configuration enables it. History is loaded progressively to
+Git still traverses history and detects renames, so complex repositories can take
+time before producing the first result. History is loaded progressively to
 completion, not paginated. See [performance notes](docs/performance.md) for the
 benchmark and regression checks.
 
@@ -175,7 +168,6 @@ make dev                              # open the file picker
 make dev FILE=internal/tui/view.go
 make dev PROJECT=/path/to/repo        # open another project's file picker
 make dev PROJECT=/path/to/repo FILE=src/main.go
-make dev PROJECT=/path/to/repo FOLLOW=1 # opt into rename tracking
 # Paths containing spaces also work:
 make dev FILE="/path/to/repo/my file.go"
 ```
@@ -184,8 +176,7 @@ Ensure Go's binary install directory (`go env GOBIN`, or `$(go env GOPATH)/bin`
 when GOBIN is empty) is on PATH. Use a file with committed Git history.
 `PROJECT` sets the app's working directory; it defaults to the ghist directory.
 Relative `PROJECT` paths are resolved from the ghist directory, and relative
-`FILE` paths are resolved from `PROJECT`. Quote paths containing spaces. Set
-`FOLLOW=1` to pass `--follow`; otherwise development uses fast mode too.
+`FILE` paths are resolved from `PROJECT`. Quote paths containing spaces.
 Air watches Go sources and module files, builds into ignored `tmp/`, and
 restarts the app after changes. Each restart resets the selected commit and
 scroll position. `q` exits the TUI; then `Ctrl+C` stops the Air watcher.

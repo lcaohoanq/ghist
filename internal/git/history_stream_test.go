@@ -106,37 +106,3 @@ func TestRenameOnMergedBranchUsesRecordPaths(t *testing.T) {
 		}
 	}
 }
-
-func TestFastHistoryDoesNotFollowRenamesEvenWithGitConfig(t *testing.T) {
-	dir := fixture(t)
-	write(t, dir, "old", "one\ntwo\nthree\n")
-	original := commit(t, dir, "create")
-	gitCmd(t, dir, "mv", "old", "new")
-	renamed := commit(t, dir, "rename")
-	gitCmd(t, dir, "config", "log.follow", "true")
-	gitCmd(t, dir, "config", "diff.renames", "true")
-	r, err := Open(context.Background(), filepath.Join(dir, "new"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	h, err := r.FileHistory(context.Background())
-	if err != nil || len(h.Versions) != 1 {
-		t.Fatalf("fast history: %+v %v", h, err)
-	}
-	if v := h.Versions[0]; v.Commit.Hash != renamed || v.Change != "A" || v.BeforePath != "" {
-		t.Fatalf("fast rename treated as %+v", v)
-	}
-	d, err := r.Diff(context.Background(), h.Versions[0])
-	if err != nil || !strings.Contains(d.Patch, "new file mode") {
-		t.Fatalf("fast diff: %+v %v", d, err)
-	}
-	r.FollowRenames = true
-	h, err = r.FileHistory(context.Background())
-	if err != nil || len(h.Versions) != 2 || h.Versions[1].Commit.Hash != original || h.Versions[0].BeforePath != "old" {
-		t.Fatalf("follow history: %+v %v", h, err)
-	}
-	d, err = r.Diff(context.Background(), h.Versions[0])
-	if err != nil || !strings.Contains(d.Patch, "rename from old") {
-		t.Fatalf("follow diff: %+v %v", d, err)
-	}
-}

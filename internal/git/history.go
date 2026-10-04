@@ -24,15 +24,6 @@ func (r *Repository) FileHistory(ctx context.Context) (history.FileHistory, erro
 // Paths come from each record, rather than a mutable path shared by branches.
 func (r *Repository) StreamHistory(ctx context.Context, emit func(history.FileVersion) error) error {
 	count := 0
-	args := []string{"log", "--root", "--no-notes", "--no-show-signature", "--diff-merges=first-parent",
-		"--name-status", "--no-ext-diff", "--no-textconv", "--topo-order",
-		"--format=%x00%H%x00%P%x00%an%x00%ae%x00%aI%x00%s", "-z"}
-	if r.FollowRenames {
-		args = append(args, "--follow", "-M")
-	} else {
-		args = append(args, "--no-follow", "--no-renames")
-	}
-	args = append(args, r.Head, "--", r.Path)
 	err := stream(ctx, r.Root, func(reader io.Reader) error {
 		return parseHistory(reader, r.Path, func(v history.FileVersion) error {
 			if err := ctx.Err(); err != nil {
@@ -41,7 +32,9 @@ func (r *Repository) StreamHistory(ctx context.Context, emit func(history.FileVe
 			count++
 			return emit(v)
 		})
-	}, args...)
+	}, "log", "--root", "--no-notes", "--follow", "-M", "--no-show-signature", "--diff-merges=first-parent",
+		"--name-status", "--no-ext-diff", "--no-textconv", "--topo-order",
+		"--format=%x00%H%x00%P%x00%an%x00%ae%x00%aI%x00%s", "-z", r.Head, "--", r.Path)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
