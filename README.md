@@ -40,28 +40,6 @@ ghist -- -filename
 ghist --help
 ```
 
-With no arguments, ghist uses [fzf](https://github.com/junegunn/fzf#installation)
-to fuzzy-find a file across the current repository, including when launched from
-a subdirectory. Type part of a name or path, use the arrow keys to select, and
-press `Enter` to open History. `Esc` / `Ctrl+C` cancels without an error.
-Only this mode requires `fzf`; passing a file works without it. No `rg` is needed.
-The picker uses its own options rather than `FZF_DEFAULT_OPTS` or its options file.
-
-Candidates are files in the captured `HEAD`, including tracked dotfiles and
-symlinks, excluding submodules and files added only to the index or working tree.
-A file deleted locally is still selectable; a file deleted from `HEAD` can still
-be explored by passing its path directly. In picker mode, `Esc` from History
-returns to file selection (also when the preview has focus). From full-screen
-File/Diff, `Esc` first goes back through Diff/History. `q` / `Ctrl+C` quits ghist.
-Returning to the picker starts a fresh search and refreshes the files from HEAD;
-opening a file starts a fresh History view. Passing a file directly keeps the
-existing `Esc` behavior.
-
-Paths are relative to your current directory. Run from a repository subdirectory
-or pass an absolute path. Deleted files work if their path still has Git history.
-The repository's HEAD is captured when you open the file; uncommitted changes are
-not included. The tool never checks out a revision or modifies your repository.
-
 | Key | Action |
 | --- | --- |
 | `↑` / `k`, `↓` / `j` | Select a commit or scroll content |
@@ -76,61 +54,6 @@ not included. The tool never checks out a revision or modifies your repository.
 | `PgUp`, `PgDn`, `Home`, `End` | Page / jump in the list or content |
 | `Esc` | File → diff → history → picker (when started without a file); direct-file mode focuses history from preview |
 | `q`, `Ctrl+C` | Cancel loading and quit |
-
-At 110 columns or wider, History shows a 45% commit list and 55% diff preview
-for the selected file. Selection automatically refreshes the preview after a
-100 ms pause. Arrow/page keys scroll the focused panel; click to focus or select
-a commit, and use the mouse wheel over either panel to navigate it. `p`/`n`
-always changes the selected version. Narrower terminals show the full-width
-list; `Enter` or `d` opens the full-screen diff.
-
-History groups consecutive commits by their displayed author date, with a bold
-`▾` / `▸` day header and commit count. All groups start expanded. Click a header
-or focus it with the navigation keys and press `Enter` or `Space` to toggle it;
-`←` collapses the current group and `→` expands it. Navigation and mouse scrolling
-follow visible rows, including headers. Focusing a header keeps the last selected
-commit's metadata and preview; `d` / `f` still opens that commit. `p` / `n` follows
-the original version order and automatically expands the destination group.
-Group state survives view changes and resizing, but resets on app restart.
-Dates use each commit's recorded timezone. Git's ordering is preserved, so a date
-that recurs later in history has a separate group.
-
-Diffs use readable foreground text on muted addition/deletion backgrounds,
-with `+`/`-` markers and old/new line numbers. At 100 columns of available diff
-space, the default is Before/After columns; narrower panels use unified rows.
-Press `Enter` or `d` to expand the preview, then `s` to switch layouts. Wrapped
-continuations use `↪` and stay aligned across the two sides.
-
-Diffs compare a commit with its first parent, or an empty tree for the root
-commit. Merge commits are labeled accordingly. Previous/next follows the file
-history list, not the commit's parent pointer. File renames follow Git's rename
-detection heuristics; snapshots use the name at the historical commit.
-
-Deleted-file snapshots and binary files show explanatory messages. Empty files
-are distinguished from deleted files. Content wraps to the terminal width and
-can be scrolled. Resize a very small terminal to see the full interface.
-
-## Large repositories
-
-History streams into the UI as Git produces results. You can inspect loaded
-commits while older history is still arriving; the footer shows progress. Once
-the entire history finishes loading, it shows the commit count and total fetch
-time (for example, `Fetched 120 commits in 1.234s`). This measures history loading,
-including delivery of streamed batches, and does not wait for diff previews.
-Returning to the picker or quitting cancels the traversal. If loading fails after
-some commits arrive, they remain available with a “History incomplete” message.
-
-Metadata and historical file paths come from one Git traversal, including rename
-statuses. Diff and snapshot results share an in-memory LRU per opened file,
-limited to 64 entries and 32 MiB of string payload. Reopening a file starts a new
-session. Diff/file views initially retain up to 2 MiB of output; press `L` to load
-the complete result explicitly. This limits retained output, not Git's work to
-compute it. Full output bypasses the content cache.
-
-Git still traverses history and detects renames, so complex repositories can take
-time before producing the first result. History is loaded progressively to
-completion, not paginated. See [performance notes](docs/performance.md) for the
-benchmark and regression checks.
 
 ## Development
 
