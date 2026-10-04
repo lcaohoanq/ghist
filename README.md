@@ -14,22 +14,9 @@ git clone --depth 1 --branch develop https://github.com/lcaohoanq/ghist.git ~/.g
 ~/.ghist/install
 ```
 
-The installer is currently available on the `develop` branch.
-
-The installer builds the checked-out source for your OS and CPU, downloads Go
-dependencies as needed, and installs `ghist` into `~/.local/bin` (`ghist.exe` on
-Windows). It needs neither Air nor sudo, and does not edit shell profiles. On
-Windows, use Git Bash for these installation commands, not PowerShell or cmd.exe.
-
-If that directory is not on PATH, add this to your shell configuration:
-
 ```sh
-# bash, zsh, or Git Bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
-
-For fish, use `fish_add_path "$HOME/.local/bin"`. Then run `ghist --help`.
-Choose another destination with `~/.ghist/install --bin-dir /path/to/bin`.
 
 Update an existing installation:
 
@@ -37,18 +24,6 @@ Update an existing installation:
 git -C ~/.ghist pull --ff-only
 ~/.ghist/install
 ```
-
-The installed version follows your checkout. To install the release **before Fast
-mode**, clone its tag instead (into a separate directory):
-
-```sh
-git clone --depth 1 --branch v0.1.0 https://github.com/lcaohoanq/ghist.git ~/.ghist-v0.1.0
-```
-
-That historical tag predates this installer. For it, use the prebuilt binaries
-from [GitHub Releases](https://github.com/lcaohoanq/ghist/releases/tag/v0.1.0), or
-build inside its checkout with `go build -o ghist ./cmd/ghist`. Both v0.1.0 and the
-current develop branch follow renames by default; no `--follow` flag is needed.
 
 Running ghist requires Git (core tests use 2.55) and an interactive terminal.
 [fzf](https://github.com/junegunn/fzf#installation) is optional for file selection;
@@ -172,19 +147,6 @@ make dev PROJECT=/path/to/repo FILE=src/main.go
 make dev FILE="/path/to/repo/my file.go"
 ```
 
-Ensure Go's binary install directory (`go env GOBIN`, or `$(go env GOPATH)/bin`
-when GOBIN is empty) is on PATH. Use a file with committed Git history.
-`PROJECT` sets the app's working directory; it defaults to the ghist directory.
-Relative `PROJECT` paths are resolved from the ghist directory, and relative
-`FILE` paths are resolved from `PROJECT`. Quote paths containing spaces.
-Air watches Go sources and module files, builds into ignored `tmp/`, and
-restarts the app after changes. Each restart resets the selected commit and
-scroll position. `q` exits the TUI; then `Ctrl+C` stops the Air watcher.
-The development helper reconnects the foreground terminal and restores its
-state on restart. Build errors are recorded in `tmp/build-errors.log`.
-You can also run `PROJECT=/path/to/repo FILE=path/to/file air -c .air.toml` directly.
-
-
 ```sh
 make build
 make check
@@ -194,10 +156,3 @@ make check
 - `internal/history`: UI-independent data, adapter interface and service.
 - `internal/tui`: Bubble Tea v2 state, asynchronous loading and rendering.
 - `cmd/ghist`: argument parsing, terminal checks and composition.
-
-Integration tests create local temporary Git repositories, including rename,
-deletion, binary-file and merge scenarios. They require Git but no network.
-
-The MVP includes file history, commit metadata, diffs, snapshots and navigation.
-Blame, line history, search, working-tree comparisons, GUI and hosting-service
-integrations are future work. See [plan.md](plan.md).
