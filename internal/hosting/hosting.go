@@ -140,9 +140,11 @@ func ParseRemote(raw string) (Remote, error) {
 	}
 	host := strings.ToLower(u.Hostname())
 	provider := Provider("")
-	if host == "github.com" || strings.Contains(host, "github") {
+	hasGitHub := host == "github.com" || strings.Contains(host, "github")
+	hasGitLab := host == "gitlab.com" || strings.Contains(host, "gitlab")
+	if hasGitHub && !hasGitLab {
 		provider = GitHub
-	} else if host == "gitlab.com" || strings.Contains(host, "gitlab") {
+	} else if hasGitLab && !hasGitHub {
 		provider = GitLab
 	}
 	return Remote{URL: raw, Host: host, ProjectPath: project, Provider: provider}, nil
