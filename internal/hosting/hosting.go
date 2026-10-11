@@ -232,7 +232,7 @@ func (s *Service) Fetch(ctx context.Context, sha string) ([]ReviewLink, error) {
 	if err != nil && remote.Provider == GitLab && unsupportedGlabHostnameFlag(err) {
 		args = []string{"api", "projects/" + url.PathEscape(remote.ProjectPath) + "/repository/commits/" + url.PathEscape(sha) + "/merge_requests"}
 		out, err = s.runner.Run(ctx, s.root, name, args...)
-	out, err := s.runner.Run(ctx, s.root, name, args...)
+	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return nil, err
