@@ -198,6 +198,13 @@ func (s *Service) Fetch(ctx context.Context, sha string) ([]ReviewLink, error) {
 		return nil, errors.New("unsupported origin host; review lookup unavailable")
 	}
 	out, err := s.runner.Run(ctx, s.root, name, args...)
+	// Older glab releases do not expose --hostname on `glab api`. Because the
+	// command runs at the repository root, glab can safely infer the GitLab host
+	// from origin; retry without the unsupported flag for those versions.
+	if err != nil && s.remote.Provider == GitLab && unsupportedGlabHostnameFlag(err) {
+		args = []string{"api", "projects/" + url.PathEscape(s.remote.ProjectPath) + "/repository/commits/" + url.PathEscape(sha) + "/merge_requests"}
+		out, err = s.runner.Run(ctx, s.root, name, args...)
+	}
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return nil, err
@@ -219,6 +226,12 @@ func (s *Service) Fetch(ctx context.Context, sha string) ([]ReviewLink, error) {
 	s.cache[sha] = append([]ReviewLink(nil), links...)
 	s.mu.Unlock()
 	return links, nil
+}
+
+func unsupportedGlabHostnameFlag(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "unknown flag") && strings.Contains(message, "hostname") ||
+		strings.Contains(message, "accepts 1 arg") && strings.Contains(message, "received 3")
 }
 
 func parseLinks(provider Provider, remoteHost string, data []byte) ([]ReviewLink, error) {

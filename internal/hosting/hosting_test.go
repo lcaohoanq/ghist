@@ -133,6 +133,21 @@ func TestFetchGitLabAndOpenArguments(t *testing.T) {
 	}
 }
 
+func TestFetchGitLabFallsBackForOlderCLI(t *testing.T) {
+	sha := "abc123"
+	modernArgs := []string{"api", "--hostname", "example.test", "projects/group%2Fsub%2Frepo/repository/commits/abc123/merge_requests"}
+	legacyArgs := []string{"api", "projects/group%2Fsub%2Frepo/repository/commits/abc123/merge_requests"}
+	f := &fakeRunner{responses: map[string][]byte{
+		commandKey("glab", legacyArgs): []byte(`[{"iid":7,"web_url":"https://example.test/group/sub/repo/-/merge_requests/7"}]`),
+	}, errors: map[string]error{
+		commandKey("glab", modernArgs): errors.New("accepts 1 arg(s), received 3"),
+	}}
+	links, err := configuredService(GitLab, f).Fetch(context.Background(), sha)
+	if err != nil || len(links) != 1 || links[0].Number != 7 || len(f.calls) != 2 {
+		t.Fatalf("legacy fallback = %+v, %v; calls=%+v", links, err, f.calls)
+	}
+}
+
 func TestFetchRejectsMalformedAndUnsafeResponses(t *testing.T) {
 	for _, data := range []string{
 		`not json`,
