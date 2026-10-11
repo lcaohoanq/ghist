@@ -58,6 +58,7 @@ func run(args []string) error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	reviewsByRoot := make(map[string]*hosting.Service)
 	for {
 		repo, err := openTarget(ctx, path)
 		if errors.Is(err, errPickerCancelled) {
@@ -66,7 +67,11 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		reviews := hosting.New(ctx, repo.Root)
+		reviews := reviewsByRoot[repo.Root]
+		if reviews == nil {
+			reviews = hosting.New(ctx, repo.Root)
+			reviewsByRoot[repo.Root] = reviews
+		}
 		model := tui.New(ctx, history.NewService(repo), repo.Path, reviews)
 		if path == "" {
 			model = model.WithPicker()
