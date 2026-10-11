@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/lcaohoanq/ghist/internal/history"
+	"github.com/lcaohoanq/ghist/internal/hosting"
 )
 
 type Explorer interface {
@@ -41,6 +42,8 @@ type Model struct {
 	stop                            context.CancelFunc
 	ctx                             context.Context
 	service                         Explorer
+	reviewer                        hosting.Reviewer
+	review                          reviewState
 	path                            string
 	history                         history.FileHistory
 	selected, offset, width, height int
@@ -63,9 +66,14 @@ type contentMsg struct {
 	err     error
 }
 
-func New(ctx context.Context, service Explorer, path string) Model {
+func New(ctx context.Context, service Explorer, path string, reviewers ...hosting.Reviewer) Model {
 	ctx, stop := context.WithCancel(ctx)
-	return Model{historyEvents: make(chan historyBatchMsg, 1), renderCache: &renderCache{}, ctx: ctx, stop: stop, service: service, path: path, width: 80, height: 24, loading: true, historyCursor: 1}
+	m := Model{historyEvents: make(chan historyBatchMsg, 1), renderCache: &renderCache{}, ctx: ctx, stop: stop, service: service, path: path, width: 80, height: 24, loading: true, historyCursor: 1}
+	if len(reviewers) > 0 {
+		m.reviewer = reviewers[0]
+		m.review.cache = make(map[string]reviewResult)
+	}
+	return m
 }
 
 // WithPicker enables returning to file selection with Esc from History.
@@ -169,6 +177,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.preview.content, m.preview.err = msg.content, msg.err
 			m.clampPreview()
 		}
+	case reviewReadyMsg:
+		if msg.request == m.review.request && msg.sha == m.review.sha && m.ctx.Err() == nil {
+			return m, m.fetchReview(msg)
+		}
+	case reviewMsg:
+		if msg.request == m.review.request && msg.sha == m.review.sha {
+			m.review.loading = false
+			m.review.links, m.review.err = msg.links, msg.err
+			if msg.err == nil {
+				m.review.cache[msg.sha] = reviewResult{links: append([]hosting.ReviewLink(nil), msg.links...)}
+			}
+			m.clampOffset()
+			m.clampHistory()
+			m.clampPreview()
+		}
+	case reviewOpenMsg:
+		if msg.sha == m.review.sha {
+			m.review.openErr = msg.err
+			m.clampOffset()
+			m.clampHistory()
+			m.clampPreview()
+		}
 	case tea.MouseClickMsg:
 		return m.mouse(msg.Mouse(), false)
 	case tea.MouseWheelMsg:
@@ -203,7 +233,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var preview tea.Cmd
 		if first && len(m.history.Versions) > 0 {
 			m.revealSelected()
-			preview = m.schedulePreview()
+			preview = m.scheduleSelection()
 		}
 		if msg.done {
 			if len(m.history.Versions) == 0 && msg.err == nil {
@@ -230,7 +260,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.err == nil && len(m.history.Versions) == 0 {
 			m.err = history.ErrNoHistory
 		}
-		cmd := m.schedulePreview()
+		cmd := m.scheduleSelection()
 		return m, cmd
 	case contentMsg:
 		if msg.request != m.request {
@@ -253,6 +283,7 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 		}
 		m.invalidate()
 		m.invalidatePreview()
+		m.invalidateReview()
 		return m, tea.Quit
 	case "s":
 		if m.mode != fileView {
@@ -261,6 +292,8 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 			m.preview.offset = 0
 		}
 		return m, nil
+	case "o":
+		return m, m.openReview(0)
 	case "tab":
 		if m.previewVisible() {
 			m.previewFocus = !m.previewFocus
@@ -283,7 +316,7 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 			m.offset = 0
 			m.err = nil
 			m.content = ""
-			cmd := m.schedulePreview()
+			cmd := m.scheduleSelection()
 			return m, cmd
 		}
 		return m, nil
@@ -332,10 +365,9 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 			m.selected = next
 			m.revealSelected()
 			if m.mode != historyView {
-				cmd := m.load(m.mode)
-				return m, cmd
+				return m, tea.Batch(m.load(m.mode), m.scheduleReview())
 			}
-			cmd := m.schedulePreview()
+			cmd := m.scheduleSelection()
 			return m, cmd
 		}
 	case "up", "k", "down", "j", "pgup", "pgdown", "home", "end":
@@ -382,7 +414,7 @@ func (m Model) key(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 func (m Model) bodyHeight() int {
-	chrome := 7
+	chrome := 4 + len(m.metadata())
 	if m.mode == historyView {
 		chrome++
 	}
@@ -404,11 +436,19 @@ func (m Model) metadata() []string {
 	if v.Merge {
 		parent = "merge; first " + parent
 	}
-	return []string{
+	rows := []string{
 		fmt.Sprintf("%s  %s", c.ShortHash, c.Subject),
+	}
+	reviews, _ := m.reviewLayout()
+	rows = append(rows, reviews...)
+	return append(rows,
 		fmt.Sprintf("%s <%s>  %s", c.Author, c.Email, c.Date.Format("02-01-2006 15:04:05 -07:00")),
 		fmt.Sprintf("%s | %s | version %d/%d", v.Path(), parent, m.selected+1, len(m.history.Versions)),
-	}
+	)
+}
+
+func (m *Model) scheduleSelection() tea.Cmd {
+	return tea.Batch(m.schedulePreview(), m.scheduleReview())
 }
 
 const limitedNotice = "Output limited to 2 MiB. Press L to load full output.\n"

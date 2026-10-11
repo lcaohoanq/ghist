@@ -28,4 +28,7 @@ func TestParseArgs(t *testing.T) {
 	if !errors.Is(err, flag.ErrHelp) || out.Len() == 0 {
 		t.Fatal("help", err)
 	}
+	if !bytes.Contains(out.Bytes(), []byte("o open first PR/MR")) {
+		t.Fatal("help does not document review shortcut")
+	}
 }

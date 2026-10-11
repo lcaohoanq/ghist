@@ -99,9 +99,9 @@ func (m Model) previewRows() []string {
 	}
 	switch {
 	case m.preview.loading:
-		rows[0] = paint("33", "Loading…")
+		rows[0] = paint(styleYellow, "Loading…")
 	case m.preview.err != nil:
-		rows[0] = paint("31", "Error: "+single(m.preview.err.Error()))
+		rows[0] = paint(styleRed, "Error: "+single(m.preview.err.Error()))
 	case len(m.history.Versions) > 0:
 		lines := m.previewLines()
 		start := min(m.preview.offset, len(lines))
@@ -118,18 +118,23 @@ func panelCell(s string, width int) string {
 }
 func (m Model) separator() string {
 	if m.previewFocus {
-		return paint("1;36", "│")
+		return paint(styleBoldCyan, "│")
 	}
-	return paint("90", "│")
+	return paint(styleMuted, "│")
 }
 func (m Model) mouse(mouse tea.Mouse, wheel bool) (tea.Model, tea.Cmd) {
-	if m.width < 30 || m.height < 10 || mouse.X < 0 || mouse.X >= m.width || mouse.Y < 5 || mouse.Y >= m.height-2 {
+	if m.width < 30 || m.height < 10 || mouse.X < 0 || mouse.X >= m.width || mouse.Y < 0 || mouse.Y >= m.height-2 {
 		return m, nil
 	}
 	if !wheel && mouse.Button != tea.MouseLeft {
 		return m, nil
 	}
 	if m.mode != historyView {
+		if !wheel {
+			if cmd := m.reviewClick(mouse.X, mouse.Y); cmd != nil {
+				return m, cmd
+			}
+		}
 		if wheel {
 			if mouse.Button == tea.MouseWheelUp {
 				return m.key("up")
@@ -141,6 +146,15 @@ func (m Model) mouse(mouse tea.Mouse, wheel bool) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if len(m.history.Versions) == 0 {
+		return m, nil
+	}
+	if !wheel {
+		if cmd := m.reviewClick(mouse.X, mouse.Y); cmd != nil {
+			return m, cmd
+		}
+	}
+	bodyStart := 3 + len(m.metadata())
+	if mouse.Y < bodyStart {
 		return m, nil
 	}
 	if m.previewVisible() && mouse.X == m.listWidth() {
@@ -165,8 +179,8 @@ func (m Model) mouse(mouse tea.Mouse, wheel bool) (tea.Model, tea.Cmd) {
 		}
 		cmd := m.focusHistoryRow(m.historyCursor + delta)
 		return m, cmd
-	} else if !inPreview && mouse.Y >= 6 {
-		next := m.historyOffset + mouse.Y - 6
+	} else if !inPreview {
+		next := m.historyOffset + mouse.Y - bodyStart
 		rows := m.historyRows()
 		if next < len(rows) {
 			cmd := m.focusHistoryRow(next)
@@ -177,4 +191,15 @@ func (m Model) mouse(mouse tea.Mouse, wheel bool) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m *Model) reviewClick(x, y int) tea.Cmd {
+	_, hits := m.reviewLayout()
+	for _, hit := range hits {
+		// Row zero is the title and metadata row zero is the commit subject.
+		if y == 2+hit.row && x >= hit.start && x < hit.end {
+			return m.openReview(hit.index)
+		}
+	}
+	return nil
 }

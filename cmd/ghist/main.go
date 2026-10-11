@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/term"
 	"github.com/lcaohoanq/ghist/internal/history"
+	"github.com/lcaohoanq/ghist/internal/hosting"
 	"github.com/lcaohoanq/ghist/internal/tui"
 )
 
@@ -26,7 +27,7 @@ Paths are relative to your current directory; absolute paths also work.
 Use -- before filenames beginning with a dash.
 
 Keys: ↑/↓ or j/k select, Enter inspect, d diff, f file,
-      p older, n newer, Esc back, q or Ctrl+C quit.
+      o open first PR/MR, p older, n newer, Esc back, q or Ctrl+C quit.
 `
 
 func parseArgs(args []string, out io.Writer) (string, error) {
@@ -65,7 +66,8 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		model := tui.New(ctx, history.NewService(repo), repo.Path)
+		reviews := hosting.New(ctx, repo.Root)
+		model := tui.New(ctx, history.NewService(repo), repo.Path, reviews)
 		if path == "" {
 			model = model.WithPicker()
 		}

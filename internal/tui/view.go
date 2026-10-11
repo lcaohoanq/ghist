@@ -59,9 +59,9 @@ func (c historyColumns) row(marker, hash, date, author, subject string, styled b
 	author = cell(author, c.author)
 	date = cell(date, 10)
 	if styled {
-		hash = paint("33", hash)
-		date = paint("90", date)
-		author = paint("36", author)
+		hash = paint(styleYellow, hash)
+		date = paint(styleMuted, date)
+		author = paint(styleCyan, author)
 	}
 	row := marker + hash + "  "
 	if c.date {
@@ -82,40 +82,54 @@ func (m Model) View() tea.View {
 	if m.mode == fileView {
 		mode = "File"
 	}
-	rows := []string{paint("1;36", "ghist") + " · " + paint("1", mode) + " · " + paint("36", single(m.path))}
-	for i, line := range m.metadata() {
-		code := "90"
+	rows := []string{paint(styleBoldCyan, "ghist") + " · " + paint(styleBold, mode) + " · " + paint(styleCyan, single(m.path))}
+	metadata := m.metadata()
+	reviewRows, _ := m.reviewLayout()
+	for i, line := range metadata {
+		code := styleMuted
 		if i == 0 {
-			code = "1;33"
+			code = styleBoldYellow
 		}
-		rows = append(rows, paint(code, single(line)))
+		// Review rows contain only application-generated OSC 8 hyperlinks whose
+		// URLs were validated by the hosting package. Repository text still goes
+		// through single(), which removes control sequences.
+		if m.reviewer != nil && i > 0 && i <= len(reviewRows) {
+			reviewCode := styleBoldCyan
+			reviewRow := i - 1
+			if m.review.err != nil || (m.review.openErr != nil && reviewRow == len(reviewRows)-1) {
+				reviewCode = styleBoldRed
+			}
+			rows = append(rows, paint(reviewCode, line))
+		} else {
+			rows = append(rows, paint(code, single(line)))
+		}
 	}
-	rows = append(rows, paint("90", strings.Repeat("─", m.width)))
+	rows = append(rows, paint(styleMuted, strings.Repeat("─", m.width)))
 	columns := m.columns()
 	if m.mode == historyView {
-		header := paint("1;90", columns.row("    ", "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
+		header := paint(styleBoldMuted, columns.row("    ", "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
 		if m.previewVisible() {
 			marker, previewMarker := "> ", "  "
 			if m.previewFocus {
 				marker, previewMarker = "  ", "> "
 			}
-			header = paint("1;36", columns.row("  "+marker, "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
+			header = paint(styleBoldCyan, columns.row("  "+marker, "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
 			title := previewMarker + "Diff"
 			if len(m.history.Versions) > 0 {
 				title += " · " + single(m.history.Versions[m.selected].Commit.ShortHash)
 			}
-			header = panelCell(header, m.listWidth()) + m.separator() + paint("1;36", title)
+			header = panelCell(header, m.listWidth()) + m.separator() + paint(styleBoldCyan, title)
 		}
 		rows = append(rows, header)
 	}
 	var body []string
 	switch {
 	case m.loading:
-		body = []string{paint("33", "Loading…")}
+		body = []string{paint(styleYellow, "Loading…")}
 	case m.mode == historyView && m.historyErr != nil && len(m.history.Versions) == 0:
-		body = []string{paint("31", "Error: "+single(m.historyErr.Error()))}
+		body = []string{paint(styleRed, "Error: "+single(m.historyErr.Error()))}
 	case m.err != nil:
-		body = []string{paint("31", "Error: "+single(m.err.Error()))}
+		body = []string{paint(styleRed, "Error: "+single(m.err.Error()))}
 	case m.mode == historyView:
 		visible := m.historyRows()
 		for i := m.historyOffset; i < len(visible) && len(body) < m.bodyHeight(); i++ {
@@ -132,7 +146,7 @@ func (m Model) View() tea.View {
 				}
 				line = fmt.Sprintf("%s %s · %d %s", arrow, m.history.Versions[row.group].Commit.Date.Format("02-01-2006"), row.count, label)
 				if i != m.historyCursor {
-					line = paint("1;36", line)
+					line = paint(styleBoldCyan, line)
 				}
 			} else {
 				c := m.history.Versions[row.version].Commit
@@ -143,7 +157,7 @@ func (m Model) View() tea.View {
 				line = columns.row(marker, c.ShortHash, c.Date.Format("02-01-2006"), c.Author, c.Subject, i != m.historyCursor)
 			}
 			if i == m.historyCursor {
-				line = paint("1;7", cell(line, m.listWidth()))
+				line = paint(styleSelected, cell(line, m.listWidth()))
 			}
 			body = append(body, line)
 		}
@@ -165,16 +179,16 @@ func (m Model) View() tea.View {
 
 		rows = append(rows, line)
 	}
-	rows = append(rows, paint("90", strings.Repeat("─", m.width)))
-	help := "←/→ fold · Enter toggle/inspect · ↑↓ select · d/f view · p/n version · q quit"
+	rows = append(rows, paint(styleMuted, strings.Repeat("─", m.width)))
+	help := "←/→ fold · Enter toggle/inspect · ↑↓ select · d/f view · o review · p/n version · q quit"
 	if m.previewVisible() {
-		help = "←/→ fold · Enter toggle/inspect · Tab focus · ↑↓ scroll · d/f view · s layout · p/n version · q quit"
+		help = "←/→ fold · Enter toggle/inspect · Tab focus · ↑↓ scroll · d/f view · o review · s layout · p/n version · q quit"
 	}
 	if m.mode == historyView && m.pickerEnabled {
 		help = "Esc files · " + help
 	}
 	if m.mode != historyView {
-		help = "↑↓/jk/PgUp/PgDn scroll · s split/unified · d diff · f file · p/n version · Esc back · q quit"
+		help = "↑↓/jk/PgUp/PgDn scroll · s split/unified · d diff · f file · o review · p/n version · Esc back · q quit"
 	}
 	if m.historyLoading {
 		help = fmt.Sprintf("Loaded %d commits · loading more… · ", len(m.history.Versions)) + help
@@ -184,7 +198,7 @@ func (m Model) View() tea.View {
 	if m.historyErr != nil && len(m.history.Versions) > 0 {
 		help = "History incomplete: " + single(m.historyErr.Error()) + " · " + help
 	}
-	rows = append(rows, paint("36", help))
+	rows = append(rows, paint(styleCyan, help))
 	for i := range rows {
 		rows[i] = ansi.Truncate(rows[i], m.width, "")
 	}

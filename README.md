@@ -30,6 +30,13 @@ Running ghist requires Git (core tests use 2.55) and an interactive terminal.
 passing a file works without it. No remote Git service, credentials, or network
 connection is needed to load history.
 
+PR/MR lookup is optional. Install and authenticate
+[GitHub CLI (`gh`)](https://cli.github.com/) or
+[GitLab CLI (`glab`)](https://gitlab.com/gitlab-org/cli) to show reviews for the
+selected commit. GitHub.com, GitLab.com, and authenticated self-hosted instances
+are supported. A missing CLI, login, `origin`, or network connection never
+prevents local history, preview, diff, file, or picker features from working.
+
 ## Usage
 
 ```sh
@@ -48,6 +55,7 @@ ghist --help
 | `Space`, click day header | Collapse / expand that day group |
 | `←`, `→` | Collapse / expand the focused day group |
 | `d`, `f` | Open diff or full file |
+| `o` | Open the first displayed pull request / merge request in a browser |
 | `s` | Toggle split/unified diff (split requires 100 columns in the diff panel) |
 | `L` | Load full output when a diff or file exceeds the initial 2 MiB limit |
 | `p`, `n` | Older / newer file version |
