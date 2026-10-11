@@ -20,28 +20,107 @@ func (r *Repository) FileHistory(ctx context.Context) (history.FileHistory, erro
 	return result, err
 }
 
+// logArgs are the git-log flags shared between a full traversal and a
+// continuation run (everything except the revision range).
+var logArgs = []string{
+	"log", "--root", "--no-notes", "--follow", "-M", "--no-show-signature",
+	"--diff-merges=first-parent", "--name-status", "--no-ext-diff",
+	"--no-textconv", "--topo-order",
+	"--format=%x00%H%x00%P%x00%an%x00%ae%x00%aI%x00%s", "-z",
+}
+
 // StreamHistory obtains metadata and historical paths in one Git traversal.
-// Paths come from each record, rather than a mutable path shared by branches.
+// On first run the result is persisted to a disk cache keyed by
+// (root, filePath, HEAD). If a previous run was interrupted the cache is
+// loaded and emitted immediately; git is then invoked only for the commits
+// that were not yet fetched, resuming from the last known hash.
 func (r *Repository) StreamHistory(ctx context.Context, emit func(history.FileVersion) error) error {
-	count := 0
-	err := stream(ctx, r.Root, func(reader io.Reader) error {
+	cached, hasCached := loadCache(r.Root, r.Path, r.Head)
+
+	// --- fast path: full history already on disk ---
+	if hasCached && cached.Complete {
+		if len(cached.Versions) == 0 {
+			return history.ErrNoHistory
+		}
+		for _, v := range cached.Versions {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if err := emit(v); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// --- resume path: emit cached prefix, then continue from LastHash ---
+	var accumulated []history.FileVersion
+	if hasCached && len(cached.Versions) > 0 {
+		for _, v := range cached.Versions {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if err := emit(v); err != nil {
+				return err
+			}
+		}
+		accumulated = cached.Versions
+	}
+
+	// Build the revision range. When resuming we ask git for everything
+	// older than the last cached commit: "<lastHash>^@" expands to the
+	// parents of lastHash, so we get exactly the commits that follow it in
+	// the traversal without re-emitting lastHash itself.
+	// On a fresh run we start from HEAD as usual.
+	var revRange string
+	if hasCached && cached.LastHash != "" {
+		revRange = cached.LastHash + "^@"
+	} else {
+		revRange = r.Head
+	}
+
+	args := make([]string, len(logArgs), len(logArgs)+3)
+	copy(args, logArgs)
+	args = append(args, revRange, "--", r.Path)
+
+	streamErr := stream(ctx, r.Root, func(reader io.Reader) error {
 		return parseHistory(reader, r.Path, func(v history.FileVersion) error {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			count++
+			accumulated = append(accumulated, v)
 			return emit(v)
 		})
-	}, "log", "--root", "--no-notes", "--follow", "-M", "--no-show-signature", "--diff-merges=first-parent",
-		"--name-status", "--no-ext-diff", "--no-textconv", "--topo-order",
-		"--format=%x00%H%x00%P%x00%an%x00%ae%x00%aI%x00%s", "-z", r.Head, "--", r.Path)
+	}, args...)
+
+	// Persist whatever was accumulated, even on a partial run (ctx cancelled).
+	// This is the key property that enables resumption: every fetched commit
+	// is saved so the next invocation can pick up where this one left off.
+	if len(accumulated) > 0 {
+		lastHash := accumulated[len(accumulated)-1].Commit.Hash
+		complete := streamErr == nil && ctx.Err() == nil
+		saveCache(diskCacheEntry{
+			Root:     r.Root,
+			FilePath: r.Path,
+			Head:     r.Head,
+			Versions: accumulated,
+			LastHash: lastHash,
+			Complete: complete,
+			SavedAt:  time.Now(),
+		})
+	}
+
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	if err == nil && count == 0 {
+	if streamErr != nil {
+		return streamErr
+	}
+	totalCount := len(accumulated)
+	if totalCount == 0 {
 		return history.ErrNoHistory
 	}
-	return err
+	return nil
 }
 
 // NUL framing preserves tabs/newlines in paths. Metadata fields are consumed
