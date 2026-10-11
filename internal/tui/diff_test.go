@@ -17,7 +17,7 @@ func TestDiffLineNumbersAndMetadata(t *testing.T) {
 		}
 	}
 	rendered := renderDiff(patch, 80, false)
-	if strings.Contains(rendered[1], removedStyle) || strings.Contains(rendered[2], addedStyle) {
+	if strings.Contains(rendered[1], styleDiffRemoved) || strings.Contains(rendered[2], styleDiffAdded) {
 		t.Fatal("file headers colored as edits")
 	}
 	text := ansi.Strip(strings.Join(rendered, "\n"))

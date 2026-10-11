@@ -80,7 +80,7 @@ func (m *Model) focusHistoryRow(index int) tea.Cmd {
 	row := rows[m.historyCursor]
 	if !row.header && row.version != m.selected {
 		m.selected = row.version
-		return m.schedulePreview()
+		return m.scheduleSelection()
 	}
 	return nil
 }

@@ -9,13 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Keep code legible on subtle, explicitly paired foreground/background colors.
-// The signs and line numbers also communicate changes without color.
-const (
-	addedStyle   = "38;2;222;230;226;48;2;24;48;38"
-	removedStyle = "38;2;235;225;227;48;2;52;30;36"
-)
-
 var hunkHeader = regexp.MustCompile(`^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 
 type diffRow struct {
@@ -72,9 +65,9 @@ func lineNumber(n, digits int) string {
 func diffStyle(kind byte) string {
 	switch kind {
 	case '+':
-		return addedStyle
+		return styleDiffAdded
 	case '-':
-		return removedStyle
+		return styleDiffRemoved
 	}
 	return ""
 }
@@ -130,7 +123,7 @@ func wrapDiffRow(row diffRow, width, digits int, side bool) []string {
 		if style := diffStyle(row.kind); style != "" {
 			parts[i] = paint(style, panelCell(lead+part, width))
 		} else {
-			parts[i] = paint("90", lead) + part
+			parts[i] = paint(styleMuted, lead) + part
 		}
 	}
 	return parts
@@ -147,14 +140,14 @@ func renderDiff(patch string, width int, unified bool) []string {
 	leftWidth := (width - 1) / 2
 	rightWidth := width - leftWidth - 1
 	if side {
-		out = append(out, paint("1;90", panelCell(" BEFORE · parent", leftWidth)+"│ AFTER · selected"))
+		out = append(out, paint(styleBoldMuted, panelCell(" BEFORE · parent", leftWidth)+"│ AFTER · selected"))
 	}
 	for i := 0; i < len(rows); {
 		row := rows[i]
 		if row.kind == 'm' || row.kind == '@' {
-			style := "90"
+			style := styleMuted
 			if row.kind == '@' {
-				style = "1;36"
+				style = styleBoldCyan
 			}
 			for _, part := range strings.Split(ansi.Hardwrap(row.text, width, true), "\n") {
 				out = append(out, paint(style, part))
@@ -203,7 +196,7 @@ func renderDiff(patch string, width int, unified bool) []string {
 				if k < len(b) {
 					r = b[k]
 				}
-				out = append(out, panelCell(l, leftWidth)+paint("90", "│")+panelCell(r, rightWidth))
+				out = append(out, panelCell(l, leftWidth)+paint(styleMuted, "│")+panelCell(r, rightWidth))
 			}
 		}
 	}

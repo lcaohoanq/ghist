@@ -175,7 +175,7 @@ func TestPreviewLayoutUnicodeAndResize(t *testing.T) {
 					t.Fatal("divider misaligned")
 				}
 			}
-			if !strings.Contains(rows[8], "\x1b["+addedStyle+"m") {
+			if !strings.Contains(rows[8], "\x1b["+styleDiffAdded+"m") {
 				t.Fatal("wrapped addition lost color")
 			}
 			c := m.columns()
