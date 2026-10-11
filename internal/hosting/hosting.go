@@ -69,39 +69,61 @@ func (execRunner) Run(ctx context.Context, dir, name string, args ...string) ([]
 }
 
 type Service struct {
-	root    string
-	runner  commandRunner
-	remote  Remote
-	initErr error
-	mu      sync.Mutex
-	cache   map[string][]ReviewLink
+	root     string
+	runner   commandRunner
+	remote   Remote
+	initErr  error
+	initOnce sync.Once
+	mu       sync.Mutex
+	cache    map[string][]ReviewLink
 }
 
-// New discovers only origin. Discovery errors are retained and reported by
-// Fetch so callers can keep the integration optional.
+// New creates a service without performing remote or authentication discovery.
+// Discovery is deferred until Fetch so the optional integration cannot delay
+// application startup.
 func New(ctx context.Context, root string) *Service {
 	return newService(ctx, root, execRunner{})
 }
 
-func newService(ctx context.Context, root string, runner commandRunner) *Service {
-	s := &Service{root: root, runner: runner, cache: make(map[string][]ReviewLink)}
-	out, err := runner.Run(ctx, root, "git", "remote", "get-url", "origin")
-	if err != nil {
-		s.initErr = errors.New("no origin remote; review lookup unavailable")
-		return s
-	}
-	s.remote, err = ParseRemote(strings.TrimSpace(string(out)))
-	if err != nil {
-		s.initErr = err
-		return s
-	}
-	if s.remote.Provider == "" {
-		s.remote.Provider, s.initErr = detectProvider(ctx, root, s.remote.Host, runner)
-	}
-	return s
+func newService(_ context.Context, root string, runner commandRunner) *Service {
+	return &Service{root: root, runner: runner, cache: make(map[string][]ReviewLink)}
 }
 
-func (s *Service) Provider() Provider { return s.remote.Provider }
+func (s *Service) initialize(ctx context.Context) {
+	s.initOnce.Do(func() {
+		remote, err := s.discover(ctx)
+		s.mu.Lock()
+		s.remote, s.initErr = remote, err
+		s.mu.Unlock()
+	})
+}
+
+func (s *Service) discover(ctx context.Context) (Remote, error) {
+	out, err := s.runner.Run(ctx, s.root, "git", "remote", "get-url", "origin")
+	if err != nil {
+		if ctx.Err() != nil {
+			return Remote{}, ctx.Err()
+		}
+		return Remote{}, errors.New("no origin remote; review lookup unavailable")
+	}
+	remote, err := ParseRemote(strings.TrimSpace(string(out)))
+	if err != nil {
+		return Remote{}, err
+	}
+	if remote.Provider == "" {
+		remote.Provider, err = detectProvider(ctx, s.root, remote.Host, s.runner)
+		if err != nil {
+			return Remote{}, err
+		}
+	}
+	return remote, nil
+}
+
+func (s *Service) Provider() Provider {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.remote.Provider
+}
 
 func ParseRemote(raw string) (Remote, error) {
 	raw = strings.TrimSpace(raw)
@@ -176,10 +198,14 @@ func (s *Service) Fetch(ctx context.Context, sha string) ([]ReviewLink, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if s.initErr != nil {
-		return nil, s.initErr
-	}
+	s.initialize(ctx)
 	s.mu.Lock()
+	if s.initErr != nil {
+		err := s.initErr
+		s.mu.Unlock()
+		return nil, err
+	}
+	remote := s.remote
 	if links, ok := s.cache[sha]; ok {
 		result := append([]ReviewLink(nil), links...)
 		s.mu.Unlock()
@@ -189,13 +215,13 @@ func (s *Service) Fetch(ctx context.Context, sha string) ([]ReviewLink, error) {
 
 	var name string
 	var args []string
-	switch s.remote.Provider {
+	switch remote.Provider {
 	case GitHub:
 		name = "gh"
-		args = []string{"api", "--hostname", s.remote.Host, path.Join("repos", s.remote.ProjectPath, "commits", sha, "pulls")}
+		args = []string{"api", "--hostname", remote.Host, path.Join("repos", remote.ProjectPath, "commits", sha, "pulls")}
 	case GitLab:
 		name = "glab"
-		args = []string{"api", "--hostname", s.remote.Host, "projects/" + url.PathEscape(s.remote.ProjectPath) + "/repository/commits/" + url.PathEscape(sha) + "/merge_requests"}
+		args = []string{"api", "--hostname", remote.Host, "projects/" + url.PathEscape(remote.ProjectPath) + "/repository/commits/" + url.PathEscape(sha) + "/merge_requests"}
 	default:
 		return nil, errors.New("unsupported origin host; review lookup unavailable")
 	}
@@ -203,8 +229,8 @@ func (s *Service) Fetch(ctx context.Context, sha string) ([]ReviewLink, error) {
 	// Older glab releases do not expose --hostname on `glab api`. Because the
 	// command runs at the repository root, glab can safely infer the GitLab host
 	// from origin; retry without the unsupported flag for those versions.
-	if err != nil && s.remote.Provider == GitLab && unsupportedGlabHostnameFlag(err) {
-		args = []string{"api", "projects/" + url.PathEscape(s.remote.ProjectPath) + "/repository/commits/" + url.PathEscape(sha) + "/merge_requests"}
+	if err != nil && remote.Provider == GitLab && unsupportedGlabHostnameFlag(err) {
+		args = []string{"api", "projects/" + url.PathEscape(remote.ProjectPath) + "/repository/commits/" + url.PathEscape(sha) + "/merge_requests"}
 		out, err = s.runner.Run(ctx, s.root, name, args...)
 	out, err := s.runner.Run(ctx, s.root, name, args...)
 	if err != nil {
@@ -215,9 +241,9 @@ func (s *Service) Fetch(ctx context.Context, sha string) ([]ReviewLink, error) {
 		if errors.As(err, &executableError) {
 			return nil, fmt.Errorf("%s CLI is required; install and authenticate with %s auth login", name, name)
 		}
-		return nil, fmt.Errorf("%s review lookup failed; check network and %s auth status", providerName(s.remote.Provider), name)
+		return nil, fmt.Errorf("%s review lookup failed; check network and %s auth status", providerName(remote.Provider), name)
 	}
-	links, err := parseLinks(s.remote.Provider, s.remote.Host, out)
+	links, err := parseLinks(remote.Provider, remote.Host, out)
 	if err != nil {
 		return nil, err
 	}
@@ -263,20 +289,23 @@ func parseLinks(provider Provider, remoteHost string, data []byte) ([]ReviewLink
 }
 
 func (s *Service) Open(ctx context.Context, link ReviewLink) error {
-	if link.Provider != s.remote.Provider {
+	s.mu.Lock()
+	remote := s.remote
+	s.mu.Unlock()
+	if link.Provider != remote.Provider {
 		return errors.New("review provider does not match origin")
 	}
-	if _, err := parseLinks(link.Provider, s.remote.Host, mustJSON(link)); err != nil {
+	if _, err := parseLinks(link.Provider, remote.Host, mustJSON(link)); err != nil {
 		return err
 	}
 	var name string
 	var args []string
 	if link.Provider == GitHub {
 		name = "gh"
-		args = []string{"pr", "view", fmt.Sprint(link.Number), "--repo", s.remote.Host + "/" + s.remote.ProjectPath, "--web"}
+		args = []string{"pr", "view", fmt.Sprint(link.Number), "--repo", remote.Host + "/" + remote.ProjectPath, "--web"}
 	} else {
 		name = "glab"
-		args = []string{"mr", "view", fmt.Sprint(link.Number), "--repo", s.remote.URL, "--web"}
+		args = []string{"mr", "view", fmt.Sprint(link.Number), "--repo", remote.URL, "--web"}
 	}
 	_, err := s.runner.Run(ctx, s.root, name, args...)
 	if err != nil && !errors.Is(err, context.Canceled) {

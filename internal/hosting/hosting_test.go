@@ -89,12 +89,14 @@ func TestSelfHostedDetection(t *testing.T) {
 }
 
 func configuredService(provider Provider, runner commandRunner) *Service {
-	return &Service{
+	s := &Service{
 		root:   "/repo",
 		runner: runner,
 		remote: Remote{URL: "git@example.test:group/sub/repo.git", Host: "example.test", ProjectPath: "group/sub/repo", Provider: provider},
 		cache:  make(map[string][]ReviewLink),
 	}
+	s.initOnce.Do(func() {})
+	return s
 }
 
 func TestFetchGitHubAndCache(t *testing.T) {
@@ -168,8 +170,43 @@ func TestFetchRejectsMalformedAndUnsafeResponses(t *testing.T) {
 func TestNewMissingOriginIsOptionalError(t *testing.T) {
 	f := &fakeRunner{responses: map[string][]byte{}, errors: map[string]error{"git remote get-url origin": errors.New("missing")}}
 	s := newService(context.Background(), "/repo", f)
+	if len(f.calls) != 0 {
+		t.Fatalf("newService performed discovery: calls=%+v", f.calls)
+	}
 	if _, err := s.Fetch(context.Background(), "abc"); err == nil || !strings.Contains(err.Error(), "no origin") {
 		t.Fatalf("Fetch error = %v", err)
+	}
+	if _, err := s.Fetch(context.Background(), "def"); err == nil || len(f.calls) != 1 {
+		t.Fatalf("discovery result not cached: calls=%+v err=%v", f.calls, err)
+	}
+}
+
+func TestFetchDefersAndCachesProviderDetection(t *testing.T) {
+	f := &fakeRunner{
+		responses: map[string][]byte{
+			"git remote get-url origin": []byte("https://code.example.test/team/repo.git\n"),
+			"gh api --hostname code.example.test repos/team/repo/commits/abc/pulls": []byte("[]"),
+			"gh api --hostname code.example.test repos/team/repo/commits/def/pulls": []byte("[]"),
+		},
+		errors: map[string]error{
+			"glab auth status --hostname code.example.test": errors.New("not authenticated"),
+		},
+	}
+	s := newService(context.Background(), "/repo", f)
+	if len(f.calls) != 0 {
+		t.Fatalf("newService performed discovery: calls=%+v", f.calls)
+	}
+	if _, err := s.Fetch(context.Background(), "abc"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Fetch(context.Background(), "def"); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Provider(); got != GitHub {
+		t.Fatalf("Provider() = %q, want %q", got, GitHub)
+	}
+	if len(f.calls) != 5 {
+		t.Fatalf("provider detection repeated: calls=%+v", f.calls)
 	}
 }
 
