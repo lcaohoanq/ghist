@@ -16,6 +16,10 @@ var (
 type Commit struct {
 	Hash, ShortHash, Author, Email, Subject string
 	Date                                    time.Time
+	// Parents holds all parent hashes as reported by Git (%P).
+	// Merge commits have len > 1. Root commits have len == 0.
+	// Parent (on FileVersion) always points to Parents[0] for diff/snapshot use.
+	Parents []string
 }
 
 // FileVersion carries paths on both sides of a change, including renames.

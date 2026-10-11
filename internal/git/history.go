@@ -93,7 +93,7 @@ func parseHistory(reader io.Reader, fallbackPath string, emit func(history.FileV
 			}
 			parents := strings.Fields(fields[0])
 			current = &history.FileVersion{
-				Commit: history.Commit{Hash: s, ShortHash: s[:7], Author: fields[1], Email: fields[2], Date: date, Subject: fields[4]},
+				Commit: history.Commit{Hash: s, ShortHash: s[:7], Author: fields[1], Email: fields[2], Date: date, Subject: fields[4], Parents: parents},
 				Merge:  len(parents) > 1, BeforePath: fallbackPath, AfterPath: fallbackPath, Change: "M",
 			}
 			if len(parents) > 0 {

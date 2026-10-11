@@ -19,7 +19,7 @@ func (m Model) historyRows() []historyRow {
 	first := &m.history.Versions[0]
 	// Append batches incrementally, including a day group split across batches.
 	// Rebuild only when collapse state changes or a different history replaces it.
-	if c.first == nil || *c.first != *first || c.count > len(m.history.Versions) || c.collapseRevision != m.collapseRevision {
+	if c.first == nil || c.first.Commit.Hash != first.Commit.Hash || c.count > len(m.history.Versions) || c.collapseRevision != m.collapseRevision {
 		c.rows = nil
 		c.count = 0
 		c.lastHeader = 0

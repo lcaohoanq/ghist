@@ -48,7 +48,7 @@ func (m Model) columns() historyColumns {
 	author := m.historyAuthorWidth()
 	width := m.listWidth()
 	showDate := width >= 60
-	fixed := 15 // selection, hash and column spacing
+	fixed := 15 + graphWidth // selection, hash, column spacing, and graph prefix
 	if showDate {
 		fixed += 12
 	}
@@ -93,13 +93,13 @@ func (m Model) View() tea.View {
 	rows = append(rows, paint("90", strings.Repeat("─", m.width)))
 	columns := m.columns()
 	if m.mode == historyView {
-		header := paint("1;90", columns.row("    ", "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
+		header := paint("1;90", "  "+columns.row("  ", "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
 		if m.previewVisible() {
 			marker, previewMarker := "> ", "  "
 			if m.previewFocus {
 				marker, previewMarker = "  ", "> "
 			}
-			header = paint("1;36", columns.row("  "+marker, "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
+			header = paint("1;36", "  "+columns.row(marker, "COMMIT", "DATE", "AUTHOR", "MESSAGE", false))
 			title := previewMarker + "Diff"
 			if len(m.history.Versions) > 0 {
 				title += " · " + single(m.history.Versions[m.selected].Commit.ShortHash)
@@ -118,10 +118,17 @@ func (m Model) View() tea.View {
 		body = []string{paint("31", "Error: "+single(m.err.Error()))}
 	case m.mode == historyView:
 		visible := m.historyRows()
+		cells := m.graphCells()
 		for i := m.historyOffset; i < len(visible) && len(body) < m.bodyHeight(); i++ {
 			row := visible[i]
 			var line string
 			if row.header {
+				// Connector: use the cell of the version just before this group,
+				// so the graph line flows continuously through day headers.
+				connPrefix := "  "
+				if row.group > 0 && row.group-1 < len(cells) {
+					connPrefix = paint("90", cells[row.group-1].connector)
+				}
 				arrow := "▾"
 				if m.collapsed[row.group] {
 					arrow = "▸"
@@ -130,17 +137,31 @@ func (m Model) View() tea.View {
 				if row.count == 1 {
 					label = "commit"
 				}
-				line = fmt.Sprintf("%s %s · %d %s", arrow, m.history.Versions[row.group].Commit.Date.Format("02-01-2006"), row.count, label)
+				dayLine := fmt.Sprintf("%s %s · %d %s", arrow, m.history.Versions[row.group].Commit.Date.Format("02-01-2006"), row.count, label)
 				if i != m.historyCursor {
-					line = paint("1;36", line)
+					dayLine = paint("1;36", dayLine)
 				}
+				line = connPrefix + dayLine
 			} else {
 				c := m.history.Versions[row.version].Commit
-				marker := "    "
-				if i == m.historyCursor {
-					marker = "  > "
+				marker := "> "
+				if i != m.historyCursor {
+					marker = "  "
 				}
-				line = columns.row(marker, c.ShortHash, c.Date.Format("02-01-2006"), c.Author, c.Subject, i != m.historyCursor)
+				// Graph symbol: ● or ◆, coloured by type.
+				graphPrefix := "  "
+				if row.version < len(cells) {
+					sym := cells[row.version].symbol
+					if len(m.history.Versions[row.version].Commit.Parents) > 1 {
+						sym = paint("35", sym) // magenta for merge
+					} else if len(m.history.Versions[row.version].Commit.Parents) == 0 {
+						sym = paint("33", sym) // yellow for root
+					} else {
+						sym = paint("32", sym) // green for normal
+					}
+					graphPrefix = sym
+				}
+				line = graphPrefix + columns.row(marker, c.ShortHash, c.Date.Format("02-01-2006"), c.Author, c.Subject, i != m.historyCursor)
 			}
 			if i == m.historyCursor {
 				line = paint("1;7", cell(line, m.listWidth()))
