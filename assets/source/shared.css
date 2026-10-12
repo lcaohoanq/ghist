@@ -1,0 +1,98 @@
+/* ghist illustration styles. Contract with render.py: .item blocks inside .sheet, zoomed 2x,
+   theming through html[data-theme="dark"], --cardline as the border colour of the finished image. */
+
+:root {
+  --paper: #ffd23f; --ink: #14110a; --muted: #14110a; --cardline: #14110a;
+  --card: #fffdf5; --cardink: #14110a; --edge: #14110a; --shadow: #14110a;
+  --keybg: #fffdf5; --keyink: #14110a; --sticker: #ff5d8f; --stickerink: #14110a; --dashed: #14110a;
+}
+html[data-theme="dark"] {
+  --paper: #2a1b63; --ink: #f4f0ff; --muted: #f4f0ff; --cardline: #6a55d8;
+  --card: #f4f0ff; --cardink: #14102e; --edge: #0d0830; --shadow: #0d0830;
+  --keybg: #f4f0ff; --keyink: #14102e; --sticker: #7dcfff; --stickerink: #0d0830; --dashed: #f4f0ff;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #888; }
+.sheet { width: max-content; padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.item {
+  zoom: 2; position: relative; overflow: hidden; width: 1200px;
+  font-family: "Bricolage Grotesque", sans-serif; color: var(--ink); background: var(--paper);
+}
+p, h1 { margin: 0; }
+
+/* The terminal. Colours follow the Tokyo Night theme of the screenshot in the README; ghist itself draws
+   with ANSI colours, so a visitor's own terminal theme decides the real look. */
+.tui {
+  --t-bg: #1a1b26; --t-fg: #a9b1d6; --t-mut: #8a93bd; --t-blue: #7aa2f7; --t-cyan: #7dcfff;
+  --t-yel: #e0af68; --t-id: #c99a5b; --t-line: #3b4261;
+  background: var(--t-bg); color: var(--t-fg); font: 400 13px/20px "JetBrains Mono", monospace;
+  position: relative; overflow: hidden; padding: 12px 16px; white-space: pre;
+}
+.tui b { font-weight: 700; }
+.c-blue { color: var(--t-blue); } .c-cyan { color: var(--t-cyan); } .c-yel { color: var(--t-yel); }
+.c-mut { color: var(--t-mut); } .c-id { color: var(--t-id); } .c-w { color: #c0caf5; }
+.rule { height: 1px; background: var(--t-line); margin: 6px 0; }
+.hrow { display: grid; grid-template-columns: 70px 92px 118px 1fr; }
+.hrow > span { overflow: hidden; text-overflow: ellipsis; }
+.hrow.sel { background: #a9b1d6; color: #1a1b26; font-weight: 700; margin: 0 -16px; padding: 0 16px; }
+.hrow.sel span { color: #1a1b26; }
+.hh { color: var(--t-cyan); font-weight: 700; }
+.dl { display: grid; grid-template-columns: 34px 14px 1fr; }
+.dl .n { color: var(--t-mut); text-align: right; padding-right: 8px; }
+.dl.add { background: #182f26; color: #dee6e2; } .dl.del { background: #341e24; color: #ebe1e3; }
+.dl.add .s { color: #9ece6a; } .dl.del .s { color: #f7768e; }
+.pane-title { color: var(--t-cyan); font-weight: 700; }
+.foot { color: var(--t-cyan); }
+
+/* Keycap: a key with a thick lower edge. */
+.cap {
+  position: absolute; min-width: 40px; height: 38px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--keybg); color: var(--keyink); border: 2.5px solid var(--edge); border-bottom-width: 6px; border-radius: 8px;
+  font: 700 18px "JetBrains Mono", monospace;
+}
+.cap.flow { position: static; }
+.tag { position: absolute; font: 500 19px/1.25 "Bricolage Grotesque", sans-serif; color: var(--ink); }
+.label { position: absolute; font: 800 17px "JetBrains Mono", monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); }
+
+/* Hard-edged window and sticker. */
+.win { position: absolute; border: 3px solid var(--shadow); border-radius: 12px; box-shadow: 12px 12px 0 var(--shadow); overflow: hidden; }
+.sticker {
+  position: absolute; transform: rotate(-5deg); background: var(--sticker); color: var(--stickerink);
+  border: 3px solid var(--shadow); box-shadow: 6px 6px 0 var(--shadow); border-radius: 999px; padding: 8px 22px;
+  font: 800 24px "Bricolage Grotesque", sans-serif; letter-spacing: -.01em;
+}
+
+/* Hero */
+#hero h1 { position: absolute; left: 50px; top: 18px; font: 800 196px/1 "Bricolage Grotesque", sans-serif; font-stretch: 78%; letter-spacing: -.035em; }
+#hero .quote { position: absolute; left: 56px; top: 228px; width: 440px; font: 800 46px/1.06 "Bricolage Grotesque", sans-serif; letter-spacing: -.02em; }
+#hero .sub { position: absolute; left: 58px; top: 334px; width: 410px; font: 500 21px/1.38 "Bricolage Grotesque", sans-serif; }
+#hero .cmd { position: absolute; left: 56px; top: 474px; padding: 9px 16px; font: 700 18px "JetBrains Mono", monospace; background: var(--shadow); color: #f4f0ff; border-radius: 8px; }
+#hero .win { left: 536px; top: 56px; width: 700px; transform: rotate(-1.6deg); transform-origin: 0 0; }
+#hero .win .tui { height: 470px; }
+#hero .sticker { left: 516px; top: 468px; }
+
+/* Workflow */
+#workflow .card { position: absolute; width: 270px; height: 280px; background: var(--card); color: var(--cardink); border: 3px solid var(--edge); border-radius: 12px; box-shadow: 8px 8px 0 var(--shadow); overflow: hidden; }
+#workflow .card .head { height: 46px; padding: 0 16px; display: flex; align-items: center; font: 800 25px "Bricolage Grotesque", sans-serif; letter-spacing: -.01em; border-bottom: 3px solid var(--edge); }
+#workflow .card .tui { height: 172px; padding-top: 8px; }
+#workflow .card .cap-text { padding: 9px 16px 0; font: 500 19px/1.25 "Bricolage Grotesque", sans-serif; }
+#workflow .pill { position: absolute; height: 52px; padding: 0 16px; display: flex; align-items: center; gap: 10px; background: var(--card); color: var(--cardink); border: 3px solid var(--edge); border-radius: 999px; box-shadow: 5px 5px 0 var(--shadow); font: 700 19px "JetBrains Mono", monospace; white-space: nowrap; }
+#workflow .pill small { font: 500 19px "Bricolage Grotesque", sans-serif; }
+#workflow .row { position: absolute; display: flex; align-items: center; gap: 10px; font: 500 19px "Bricolage Grotesque", sans-serif; color: var(--ink); white-space: nowrap; }
+#workflow svg { position: absolute; left: 0; top: 0; }
+
+/* Explainer figures */
+.box { position: absolute; background: var(--card); color: var(--cardink); border: 3px solid var(--edge); border-radius: 12px; box-shadow: 8px 8px 0 var(--shadow); padding: 16px 18px; }
+.box.small { box-shadow: 6px 6px 0 var(--shadow); padding: 0; }
+.box h3 { margin: 0 0 8px; font: 800 26px/1.1 "Bricolage Grotesque", sans-serif; letter-spacing: -.01em; }
+.box p { margin: 0; font: 500 19px/1.3 "Bricolage Grotesque", sans-serif; }
+.box.dashed { background: transparent; color: var(--ink); border: 3px dashed var(--dashed); box-shadow: none; }
+.mono-t { font: 700 19px "JetBrains Mono", monospace; }
+.chip { display: inline-flex; align-items: center; height: 34px; padding: 0 11px; background: var(--keybg); color: var(--keyink); border: 2.5px solid var(--edge); border-radius: 8px; font: 700 17px "JetBrains Mono", monospace; white-space: nowrap; }
+.big { position: absolute; font: 800 40px/1.05 "Bricolage Grotesque", sans-serif; letter-spacing: -.02em; }
+.note { position: absolute; font: 500 21px/1.35 "Bricolage Grotesque", sans-serif; }
+.xcap { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; flex: none; background: var(--sticker); color: var(--stickerink); border: 2.5px solid var(--edge); border-radius: 8px; font: 800 20px "JetBrains Mono", monospace; }
+.rowline { display: flex; align-items: center; gap: 12px; }
+.eyebrow { position: absolute; font: 800 17px "JetBrains Mono", monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--ink); }
+.fig svg { position: absolute; left: 0; top: 0; }

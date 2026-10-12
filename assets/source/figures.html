@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ghist figures</title>
+<!-- Source of ../hero.webp, ../hero-dark.webp, ../workflow.webp and ../workflow-dark.webp.
+     Render from the repository root:
+       uvx --from playwright --with pillow python -I <frontdoor-illustrate>/scripts/render.py assets/source/figures.html --root assets --out assets
+     Each .item is 1200 CSS px wide, so 2400 px in the image. Fonts load from Google Fonts: render online.
+
+     Signature
+     1. Concept: ghist answers "How did this code get here?", so the pictures stage the real interface and its real keys like a product poster.
+     2. Shape language: a flat colour field, 3px ink edges, hard offset shadows, keycaps with a thick lower edge, the real terminal drawn in vector.
+     3. Typeface: Bricolage Grotesque (display, condensed and heavy) with JetBrains Mono for keys and terminal text.
+     4. Palette logic: one saturated field per theme (yellow on light, deep violet on dark), ink for every edge and shadow, the terminal in the Tokyo Night colours of the README screenshot.
+     5. Presentation: a poster with one big wordmark, one pitch quote and the interface in a tilted window; the workflow is three cards joined by keycap arrows.
+     6. Not: a metaphor drawing (rivers, strata, plates), soft gradients, stock icons, anything the code does not do.
+     hero-dark.webp is over the 300 KB budget when lossless (about 320 KB), so after rendering it is re-encoded lossy:
+       uvx --from pillow python -I -c "from PIL import Image; im=Image.open('assets/hero-dark.webp'); im.load(); im.save('assets/hero-dark.webp','WEBP',quality=94,method=6)"
+     Example data in the terminal is the real history of internal/hosting/hosting.go in this repository. -->
+<script src="shared.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&display=swap">
+<link rel="stylesheet" href="shared.css">
+</head>
+<body>
+<div class="sheet">
+
+<div class="item" id="hero" style="height: 560px">
+  <h1>ghist</h1>
+  <p class="quote">&ldquo;How did this code get here?&rdquo;</p>
+  <p class="sub">ghist answers it from your terminal: every commit that touched a file, what each one changed, and the file as it was then, renames included.</p>
+  <div class="cmd">$ ghist internal/hosting/hosting.go</div>
+  <div class="win" data-bleed><div class="tui" id="hero-tui"></div></div>
+  <div class="sticker">read only</div>
+</div>
+
+<div class="item" id="workflow" style="height: 640px">
+  <svg id="wf-svg" width="1200" height="640" viewBox="0 0 1200 640">
+    <defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill: var(--ink)"/></marker></defs>
+  </svg>
+  <div id="wf-layer"></div>
+</div>
+
+<div class="item fig" id="renames" style="height: 540px"></div>
+<div class="item fig" id="readonly" style="height: 620px"></div>
+<div class="item fig" id="reviews" style="height: 500px"></div>
+<div class="item fig" id="layers" style="height: 620px"></div>
+
+</div>
+<script>
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const SVG = "http://www.w3.org/2000/svg";
+
+/* Real history of internal/hosting/hosting.go in this repository (git log --follow). */
+const COMMITS = [
+  ["3d2a829", "2026-10-11", "lcaohoanq", "fix: restore GitLab fallback control flow"],
+  ["34fd8a5", "2026-10-11", "lcaohoanq", "Move hosting.New work off the startup path or bound it with a timeout"],
+  ["324a63c", "2026-10-11", "Luu Cao Hoang", "Update internal/hosting/hosting.go"],
+  ["1af59cd", "2026-10-11", "Luu Cao Hoang", "Update internal/hosting/hosting.go"],
+  ["fffea51", "2026-10-11", "lcaohoanq", "fix:retry with older gitlabcli hostname args"],
+  ["7d065b2", "2026-10-11", "lcaohoanq", "feat: add open mr integration"],
+];
+const DIFF = [ // [old line, old text, new line, new text] from the diff of 34fd8a5
+  [72, "// New discovers only origin. Discovery errors are retained and reported by", null, null],
+  [73, "// Fetch so callers can keep the integration optional.", null, null],
+  [null, null, 81, "// New creates a service without performing remote or authentication discovery."],
+  [null, null, 82, "// Discovery is deferred until Fetch so the optional integration cannot delay"],
+  [null, null, 83, "// application startup."],
+  [74, "func New(ctx context.Context, root string) *Service {", 84, "func New(ctx context.Context, root string) *Service {"],
+  [75, "\treturn newService(ctx, root, execRunner{})", 85, "\treturn newService(ctx, root, execRunner{})"],
+  [76, "}", 86, "}"],
+  [78, "func newService(ctx context.Context, root string, runner commandRunner) *Service {", null, null],
+  [null, null, 88, "func newService(_ context.Context, root string, runner commandRunner) *Service {"],
+];
+const FILE = ["type Service struct {", "\troot     string", "\trunner   commandRunner", "\tremote   Remote", "\tinitErr  error", "\tinitOnce sync.Once", "\tmu       sync.Mutex", "\tcache    map[string][]ReviewLink", "}"];
+
+function wrap(t, n) { // word wrap with the continuation mark ghist draws
+  const out = []; t = t.replace(/\t/g, "  ");
+  while (t.length > n) { let cut = t.lastIndexOf(" ", n); if (cut < n / 2) cut = n; out.push(t.slice(0, cut)); t = "↪ " + t.slice(cut).replace(/^ /, ""); }
+  out.push(t); return out;
+}
+function histHead(i) { const c = COMMITS[i];
+  return `<span class="c-cyan">ghist</span> · <b class="c-w">History</b> · <span class="c-blue">internal/hosting/hosting.go</span>\n<b class="c-yel">${c[0]}  ${esc(c[3])}</b>\n<span class="c-mut">${c[2]}  ${c[1]} 11:11:27 +0700</span>`; }
+function histRows(sel) {
+  let h = `<div class="rule"></div><div class="hrow hh"><span>COMMIT</span><span>DATE</span><span>AUTHOR</span><span>MESSAGE</span></div>`;
+  COMMITS.forEach((c, i) => { h += `<div class="hrow${i === sel ? " sel" : ""}"><span class="c-id">${c[0]}</span><span class="c-mut">${c[1]}</span><span>${esc(c[2])}</span><span>${esc(c[3])}</span></div>`; });
+  return h;
+}
+function unified(cols, maxRows, title) {
+  let h = title ? `<div class="pane-title">${title}</div>` : "", used = 0;
+  const push = (no, t, kind) => wrap(t, cols).forEach((x, i) => { if (used >= maxRows) return; used++;
+    h += `<div class="dl ${kind}"><span class="n">${i === 0 ? no : ""}</span><span class="s">${kind === "del" ? "-" : kind === "add" ? "+" : ""}</span><span>${esc(x)}</span></div>`; });
+  DIFF.forEach(r => { if (r[1] != null && r[3] != null) push(r[0], r[1], ""); else { if (r[1] != null) push(r[0], r[1], "del"); if (r[3] != null) push(r[2], r[3], "add"); } });
+  return h;
+}
+
+/* Hero: the interface as ghist draws it with the second commit selected. */
+document.getElementById("hero-tui").innerHTML = histHead(1) + histRows(1) + `<div class="rule"></div>` + unified(52, 10, "Diff · 34fd8a5") +
+  `<div class="foot" style="margin-top:6px">Tab focus · ↑/↓/PgUp/PgDn scroll · Enter/d expand · s split/unified · f file · p/n version · q quit</div>`;
+
+/* Workflow */
+(function () {
+  const layer = document.getElementById("wf-layer"), svg = document.getElementById("wf-svg");
+  const put = (html) => { const d = document.createElement("div"); d.innerHTML = html; layer.appendChild(d.firstElementChild); };
+  const line = (d) => { const p = document.createElementNS(SVG, "path"); p.setAttribute("d", d); p.setAttribute("fill", "none"); p.setAttribute("stroke", "var(--ink)"); p.setAttribute("stroke-width", 3.5); p.setAttribute("stroke-linejoin", "round"); p.setAttribute("marker-end", "url(#ah)"); svg.appendChild(p); return p; };
+  const X = [56, 465, 874], TOP = 150;
+
+  const histThumb = `<span class="c-cyan">ghist</span> · <b class="c-w">History</b>\n` + COMMITS.map((c, i) => `<div class="hrow${i === 1 ? " sel" : ""}" style="grid-template-columns:68px 1fr"><span class="c-id">${c[0]}</span><span>${esc(c[3])}</span></div>`).join("");
+  const diffThumb = `<span class="c-cyan">ghist</span> · <b class="c-w">Diff</b> · <b class="c-yel">34fd8a5</b>\n` + unified(23, 6, "");
+  const fileThumb = `<span class="c-cyan">ghist</span> · <b class="c-w">File</b> · <b class="c-yel">34fd8a5</b>\n` + FILE.slice(0, 7).map((t, i) => `<div class="dl"><span class="n">${70 + i}</span><span></span><span>${esc(t.replace(/\t/g, "    "))}</span></div>`).join("");
+  const cards = [
+    ["History", histThumb, "Every commit that touched the file."],
+    ["Diff", diffThumb, "What that commit changed."],
+    ["File", fileThumb, "The whole file as it was then."],
+  ];
+  cards.forEach((c, i) => put(`<div class="card" style="left:${X[i]}px;top:${TOP}px"><div class="head">${c[0]}</div><div class="tui">${c[1]}</div><div class="cap-text">${c[2]}</div></div>`));
+
+  // start: two ways in
+  put(`<div class="pill" style="left:56px;top:40px">ghist ${esc("<file>")}</div>`);
+  put(`<div class="pill" style="left:330px;top:40px">ghist <small>then pick a file with fzf</small></div>`);
+  line("M121 94 V146");
+  line("M400 94 V122 H261 V146");
+
+  // forward: Enter or d / Enter or f; back: Esc
+  [[326, 465, "d"], [735, 874, "f"]].forEach(([a, b, k]) => {
+    const mid = (a + b) / 2, y = TOP + 112;
+    line(`M${a + 8} ${y} H${b - 8}`);
+    put(`<div class="cap" style="left:${mid - 59}px;top:${y - 56}px;width:76px">Enter</div>`);
+    put(`<div class="cap" style="left:${mid + 23}px;top:${y - 56}px;width:36px">${k}</div>`);
+    const y2 = TOP + 226;
+    line(`M${b - 8} ${y2} H${a + 8}`);
+    put(`<div class="cap" style="left:${mid - 28}px;top:${y2 - 56}px;width:56px">Esc</div>`);
+  });
+  put(`<div class="row" style="left:56px;top:${TOP + 280 + 26}px"><span class="cap flow">Esc</span><span>from History goes back to the picker, when you started with ghist alone</span></div>`);
+
+  // any screen
+  put(`<div class="label" style="left:56px;top:520px">On any screen</div>`);
+  [[56, "p", "older version"], [316, "n", "newer version"], [576, "o", "open the first PR / MR"], [964, "q", "quit"]].forEach(([x, k, t]) =>
+    put(`<div class="row" style="left:${x}px;top:552px"><span class="cap flow">${k}</span><span>${t}</span></div>`));
+})();
+
+/* Explainer figures: renames, readonly, reviews, layers */
+const SVGNS = "http://www.w3.org/2000/svg";
+function figure(id, h) {
+  const root = document.getElementById(id);
+  const svg = document.createElementNS(SVGNS, "svg");
+  svg.setAttribute("width", 1200); svg.setAttribute("height", h); svg.setAttribute("viewBox", `0 0 1200 ${h}`);
+  root.appendChild(svg);
+  const put = (html) => { const d = document.createElement("div"); d.innerHTML = html.trim(); root.appendChild(d.firstElementChild); };
+  const path = (d, extra) => { const p = document.createElementNS(SVGNS, "path"); p.setAttribute("d", d); p.setAttribute("fill", "none"); p.setAttribute("stroke", "var(--ink)"); p.setAttribute("stroke-width", 3.5); p.setAttribute("stroke-linejoin", "round"); p.setAttribute("stroke-linecap", "round"); Object.entries(extra || {}).forEach(([k, v]) => p.setAttribute(k, v)); svg.appendChild(p); return p; };
+  const arrow = (d) => path(d, { "marker-end": "url(#ah)" });
+  const shape = (name, attrs) => { const e = document.createElementNS(SVGNS, name); Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v)); svg.appendChild(e); return e; };
+  return { put, path, arrow, shape };
+}
+
+/* renames */
+(function () {
+  const f = figure("renames", 540);
+  f.put(`<div class="eyebrow" style="left:56px;top:34px">In the repository</div>`);
+  const names = ["draft.go", "draft.go", "service.go", "service.go", "service.go"];
+  names.forEach((n, i) => {
+    const x = 56 + i * 236;
+    f.put(`<div class="box small" style="left:${x}px;top:84px;width:140px;height:76px;display:flex;align-items:center;justify-content:center"><span class="mono-t" style="font-size:18px">${n}</span></div>`);
+    if (i < 4) f.arrow(`M${x + 148} 122 H${x + 228}`);
+  });
+  f.put(`<div class="sticker" style="left:418px;top:164px;font-size:22px;padding:6px 18px;transform:rotate(-4deg)">renamed</div>`);
+  f.put(`<div class="tag" style="left:56px;top:172px">oldest</div>`);
+  f.put(`<div class="tag" style="left:1096px;top:172px">HEAD</div>`);
+  f.arrow("M126 214 V266");
+  f.put(`<div class="tag" style="left:146px;top:222px">ghist lists them as one history</div>`);
+  f.put(`<div class="win" style="left:56px;top:282px;width:620px"><div class="tui" style="height:204px">` +
+    `<span class="c-cyan">ghist</span> · <b class="c-w">History</b> · <span class="c-blue">service.go</span>\n` +
+    `<b class="c-yel">d4e5f60  tidy draft</b>\n<span class="c-mut">draft.go | version 4/5</span>\n<div class="rule"></div>` +
+    [["a1b2c3d", "2026-04-18", "fix timeout"], ["b2c3d4e", "2026-04-11", "add retries"], ["c3d4e5f", "2026-04-02", "rename draft to service"], ["d4e5f60", "2026-03-24", "tidy draft"], ["e5f6071", "2026-03-15", "add draft"]]
+      .map((r, i) => `<div class="hrow${i === 3 ? " sel" : ""}" style="grid-template-columns:70px 92px 1fr"><span class="c-id">${r[0]}</span><span class="c-mut">${r[1]}</span><span>${r[2]}</span></div>`).join("") +
+    `</div></div>`);
+  f.put(`<div class="big" style="left:716px;top:286px;width:430px">One history, two names.</div>`);
+  f.put(`<div class="note" style="left:716px;top:388px;width:428px">Pick a commit from before the rename and ghist reads the file under its old path.</div>`);
+  f.put(`<div class="note" style="left:716px;top:458px;width:428px;font-size:19px">Git's rename detection decides which renames can be followed.</div>`);
+})();
+
+/* readonly */
+(function () {
+  const f = figure("readonly", 620);
+  const cmds = [["git rev-parse", "your repository and its HEAD"], ["git log --follow", "the history, renames included"], ["git diff-tree", "what a commit changed"], ["git show", "the file as it was"], ["git ls-tree", "the files for the picker"]];
+  f.put(`<div class="box" style="left:56px;top:48px;width:540px;height:352px"><h3>ghist asks Git</h3>` +
+    cmds.map(c => `<div class="rowline" style="margin-top:12px"><span class="chip" style="width:196px">${c[0]}</span><span style="font:500 19px/1.2 'Bricolage Grotesque'">${c[1]}</span></div>`).join("") + `</div>`);
+  f.put(`<div class="box" style="left:640px;top:48px;width:504px;height:352px"><h3>ghist never</h3>` +
+    ["checks out a revision", "writes a file in your repository", "needs a network to load history"].map(t => `<div class="rowline" style="margin-top:22px"><span class="xcap">✕</span><span style="font:600 23px/1.2 'Bricolage Grotesque'">${t}</span></div>`).join("") + `</div>`);
+  f.put(`<div class="sticker" style="left:956px;top:330px">read only</div>`);
+  f.put(`<div class="eyebrow" style="left:56px;top:446px">Shown</div>`);
+  f.put(`<div class="eyebrow" style="left:660px;top:446px">Not shown</div>`);
+  f.path("M56 520 H540");
+  [80, 160, 240, 320, 400, 480].forEach(x => f.shape("circle", { cx: x, cy: 520, r: 11, fill: "var(--ink)" }));
+  f.shape("circle", { cx: 540, cy: 520, r: 17, fill: "var(--sticker)", stroke: "var(--ink)", "stroke-width": 3.5 });
+  f.path("M562 520 H760", { "stroke-dasharray": "2 12" });
+  [640, 720].forEach(x => f.shape("circle", { cx: x, cy: 520, r: 11, fill: "none", stroke: "var(--ink)", "stroke-width": 3, "stroke-dasharray": "5 5" }));
+  f.put(`<div class="tag" style="left:230px;top:556px;width:330px;text-align:right">HEAD, read once when ghist opens</div>`);
+  f.put(`<div class="tag" style="left:600px;top:556px;width:200px">commits made later</div>`);
+  f.put(`<div class="box dashed" style="left:824px;top:474px;width:320px;height:92px;display:flex;align-items:center"><p>changes you have not committed</p></div>`);
+})();
+
+/* reviews */
+(function () {
+  const f = figure("reviews", 500);
+  const W = 220, X = [56, 345, 634, 923], Y = 96, H = 220;
+  const boxes = [
+    ["Commit", `<p>The one selected in History.</p><p style="margin-top:12px"><span class="chip">34fd8a5</span></p>`],
+    ["Your host", `<p>ghist reads origin to find it: GitHub or GitLab, including self-hosted.</p>`],
+    ["gh or glab", `<p>Whichever is signed in for that host asks for the PRs or MRs that contain the commit.</p>`],
+    ["Browser", `<p>The first PR or MR is shown. Press <span class="chip" style="height:30px">o</span> to open it.</p>`],
+  ];
+  boxes.forEach((b, i) => f.put(`<div class="box" style="left:${X[i]}px;top:${Y}px;width:${W}px;height:${H}px"><h3>${b[0]}</h3>${b[1]}</div>`));
+  [0, 1, 2].forEach(i => f.arrow(`M${X[i] + W + 8} ${Y + 110} H${X[i + 1] - 10}`));
+  f.put(`<div class="eyebrow" style="left:56px;top:40px">Optional: PR and MR lookup</div>`);
+  f.put(`<div class="box dashed" style="left:56px;top:362px;width:1088px;height:92px;display:flex;align-items:center"><p style="font:600 22px/1.3 'Bricolage Grotesque'">No gh or glab, no sign-in, no origin, no network? Nothing else is affected: history, diff, file and picker work as before.</p></div>`);
+})();
+
+/* layers */
+(function () {
+  const f = figure("layers", 620);
+  f.put(`<div class="box" style="left:56px;top:40px;width:1088px;height:96px"><h3 class="mono-t" style="font-size:24px">cmd/ghist</h3><p>Reads the arguments, checks the terminal, builds the pieces below and starts the interface.</p></div>`);
+  const mid = [[56, "internal/tui", "Bubble Tea state, asynchronous loading and rendering."], [450, "internal/history", "The data and the rules, with no interface and no Git. Defines what an adapter must do."], [844, "internal/git", "The Git CLI adapter. Reads history, diffs and files."]];
+  mid.forEach(m => f.put(`<div class="box" style="left:${m[0]}px;top:230px;width:300px;height:160px"><h3 class="mono-t" style="font-size:22px">${m[1]}</h3><p>${m[2]}</p></div>`));
+  [206, 600, 994].forEach(x => f.arrow(`M${x} 148 V222`));
+  f.arrow("M364 310 H442");
+  f.arrow("M836 310 H758");
+  f.put(`<div class="box" style="left:56px;top:470px;width:300px;height:112px"><h3 class="mono-t" style="font-size:22px">internal/hosting</h3><p>Optional PR and MR lookup through gh or glab.</p></div>`);
+  f.arrow("M206 398 V462");
+  f.put(`<div class="box" style="left:844px;top:470px;width:300px;height:112px"><h3 class="mono-t" style="font-size:22px">git</h3><p>Your own Git CLI. Only reads.</p></div>`);
+  f.arrow("M994 398 V462");
+  f.put(`<div class="tag" style="left:450px;top:500px;width:340px;font-size:19px">An arrow points to what a box uses.</div>`);
+})();
+</script>
+</body>
+</html>
