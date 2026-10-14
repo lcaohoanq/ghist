@@ -71,6 +71,11 @@ prevents local history, preview, diff, file, or picker features from working.
 
 ## Usage
 
+Prefer the editor? The [VS Code extension](extensions/vscode/README.md) adds a
+wide **ghist History** tab with a file timeline, local search, PR/MR links, automatic file
+following and pinning, native diffs beside it, and read-only historical files. See its README
+for local VSIX packaging, installation, and development.
+
 ```sh
 ghist                            # fuzzy-find a file, then Enter to open history
 ghist internal/order/service.go

@@ -3,3 +3,10 @@
 /coverage.out
 /tmp/
 .frontdoor/
+/extensions/vscode/node_modules/
+/extensions/vscode/out/
+/extensions/vscode/bin/
+/extensions/vscode/.vscode-test/
+/extensions/vscode/*.vsix
+/extensions/vscode/test-results/
+/extensions/vscode/playwright-report/

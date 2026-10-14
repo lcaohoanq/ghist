@@ -1,7 +1,6 @@
 name: CI
 
 on:
-  push:
   pull_request:
   workflow_dispatch:
 
@@ -35,3 +34,55 @@ jobs:
 
       - name: Build
         run: make build
+
+  extension:
+    name: VS Code extension
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: extensions/vscode
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: extensions/vscode/package-lock.json
+
+      - name: Install extension development dependencies
+        run: npm ci
+
+      - name: Build and test backend integration
+        run: npm test
+
+      - name: Install Chromium for DOM tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Test History webview
+        run: npm run test:webview
+
+      - name: Test in VS Code
+        run: xvfb-run -a npm run test:extension
+
+      - name: Package Linux VSIX
+        run: npm run package -- linux-x64
+
+      - name: Upload VSIX and theme previews
+        uses: actions/upload-artifact@v4
+        with:
+          name: ghist-vscode-0.2.0-linux-x64
+          path: |
+            extensions/vscode/ghist-linux-x64-0.2.0.vsix
+            extensions/vscode/test-results/**/*.png

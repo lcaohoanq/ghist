@@ -1,0 +1,22 @@
+body {
+  --vscode-font-family: system-ui; --vscode-font-size: 13px; --vscode-editor-font-family: monospace;
+  --vscode-editor-background: #1f1f1f; --vscode-editor-foreground: #ccc;
+  --vscode-descriptionForeground: #aaa; --vscode-panel-border: #444;
+  --vscode-focusBorder: #007fd4; --vscode-textLink-foreground: #4daafc;
+  --vscode-list-hoverBackground: #2a2d2e; --vscode-list-activeSelectionBackground: #04395e; --vscode-list-activeSelectionForeground: white;
+  --vscode-button-secondaryBackground: #313131; --vscode-button-secondaryForeground: #ccc; --vscode-button-secondaryHoverBackground: #484848;
+  --vscode-button-background: #0078d4; --vscode-button-foreground: white;
+  --vscode-input-background: #313131; --vscode-input-foreground: white; --vscode-input-placeholderForeground: #aaa;
+  --vscode-badge-background: #4d4d4d; --vscode-badge-foreground: white;
+  --vscode-gitDecoration-addedResourceForeground: #81b88b; --vscode-gitDecoration-deletedResourceForeground: #c74e39; --vscode-gitDecoration-renamedResourceForeground: #73c991;
+  --vscode-inputValidation-errorBackground: #5a1d1d; --vscode-inputValidation-errorBorder: #be1100;
+}
+body.vscode-light, body.vscode-high-contrast-light {
+  --vscode-editor-background: white; --vscode-editor-foreground: #333; --vscode-descriptionForeground: #555;
+  --vscode-panel-border: #ddd; --vscode-list-hoverBackground: #eee; --vscode-list-activeSelectionBackground: #0060c0;
+  --vscode-button-secondaryBackground: #e5e5e5; --vscode-button-secondaryForeground: #333; --vscode-input-background: #eee; --vscode-input-foreground: #333;
+  --vscode-input-placeholderForeground: #666; --vscode-textLink-foreground: #006ab1;
+  --vscode-gitDecoration-addedResourceForeground: #587c0c; --vscode-gitDecoration-deletedResourceForeground: #ad0707; --vscode-gitDecoration-renamedResourceForeground: #007100;
+}
+body.vscode-high-contrast { --vscode-editor-background: black; --vscode-editor-foreground: white; --vscode-focusBorder: #f38518; --vscode-contrastBorder: white; --vscode-contrastActiveBorder: #f38518; }
+body.vscode-high-contrast-light { --vscode-contrastBorder: #0f4a85; --vscode-contrastActiveBorder: #0f4a85; }
