@@ -39,6 +39,10 @@ export function activate(context: vscode.ExtensionContext): { getState(): Histor
       await vscode.commands.executeCommand("vscode.diff", left, right,
         `${v.afterPath || v.beforePath} (${v.parent ? v.parent.slice(0, 7) : "empty"} ↔ ${v.shortHash})`, options);
     }
+    // Opening a diff in a newly-created group can activate that group even
+    // with preserveFocus. Restore the History panel after the editor command
+    // has completed so keyboard navigation remains in the webview.
+    if (preserveFocus && current === navigation) { history.focus(); }
   }
 
   const command = <Args extends unknown[]>(name: string, handler: (...args: Args) => unknown) => {

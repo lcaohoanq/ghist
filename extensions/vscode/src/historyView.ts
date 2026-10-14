@@ -180,6 +180,7 @@ export class HistoryView implements vscode.Disposable {
     return this.controller.refresh();
   }
   selected(): HistoryEntry | undefined { return this.controller.selected(); }
+  focus(): void { this.panel?.reveal(this.panel.viewColumn); }
   resolve(entry: HistoryEntry | undefined): HistoryEntry | undefined {
     if (!entry) { return this.selected(); }
     if (entry.root !== this.controller.state.history?.root) { return undefined; }
