@@ -12,7 +12,7 @@ async function load(page, data = state()) {
     window.actions = [];
     window.acquireVsCodeApi = () => ({ getState: () => undefined, setState: () => {}, postMessage: message => {
       window.actions.push(message);
-      if (['select', 'diff'].includes(message.action)) {
+      if (window.autoHostState !== false && ['select', 'diff'].includes(message.action)) {
         window.hostState.selectedHash = message.hash;
         window.postMessage({ type: 'state', state: window.hostState }, '*');
       }
@@ -39,6 +39,17 @@ test('keyboard selects, Enter previews, click keeps focus, and toolbar sends onl
   for (const action of ['pin', 'refresh', 'choose']) {
     await page.locator(`#${action}`).click(); expect((await page.evaluate(() => window.actions.at(-1))).action).toBe(action);
   }
+});
+
+test('a stale host render cannot overwrite a newer local selection', async ({ page }) => {
+  await load(page);
+  await page.evaluate(() => { window.autoHostState = false; });
+  await page.locator('.commit').first().click();
+  await page.locator('#table').press('ArrowDown');
+  await page.evaluate(data => window.postMessage({
+    type: 'state', state: { ...data, selectedHash: data.history.versions[0].hash },
+  }, '*'), state());
+  await expect(page.locator('.selected')).toHaveAttribute('data-hash', versions()[1].hash);
 });
 
 test('local search covers message, author and hash without host requests', async ({ page }) => {

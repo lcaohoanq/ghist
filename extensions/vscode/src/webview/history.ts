@@ -18,6 +18,7 @@ let filtered: FileVersion[] = [];
 let searchable: string[] = [];
 let lastVersions: FileVersion[] | undefined;
 let selected: string | undefined;
+let pendingSelection: { context: number; hash: string } | undefined;
 let frame = 0;
 let emptyAction = "choose";
 search.value = saved?.query || "";
@@ -147,7 +148,9 @@ function ensureVisible(): void {
 function select(version: FileVersion | undefined, preview: boolean): void {
   if (!version) { return; }
   // Immediate visual feedback; the host confirms the canonical selection.
-  selected = version.hash; ensureVisible(); renderRows();
+  selected = version.hash;
+  pendingSelection = { context: state.context, hash: version.hash };
+  ensureVisible(); renderRows();
   send(preview ? "diff" : "select", selected);
 }
 function move(delta: number): void {
@@ -156,8 +159,14 @@ function move(delta: number): void {
 }
 function renderState(next: HistoryState): void {
   const changedFile = state.target !== next.target;
+  if (pendingSelection?.context !== next.context || pendingSelection.hash === next.selectedHash) {
+    pendingSelection = undefined;
+  }
   state = next;
-  selected = state.selectedHash;
+  // postMessage delivery can interleave an older host render with a newer
+  // local click/key selection. Keep the latest valid local choice until the
+  // host acknowledges it; a new context still invalidates it immediately.
+  selected = pendingSelection?.hash ?? state.selectedHash;
   if (changedFile && saved?.target !== state.target) { search.value = ""; viewport.scrollTop = 0; }
   text("repository", state.history?.root.split(/[\\/]/).pop() || "");
   text("file", state.history?.path || state.target || "Choose a file to explore its history");
