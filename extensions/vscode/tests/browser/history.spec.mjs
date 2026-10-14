@@ -111,16 +111,46 @@ test('empty, loading, no history, refresh and errors provide appropriate actions
 
 for (const theme of ['vscode-dark', 'vscode-light', 'vscode-high-contrast', 'vscode-high-contrast-light']) {
   test(`theme ${theme} uses editor tokens and visible selection`, async ({ page }, testInfo) => {
-    await load(page); await page.evaluate(theme => { document.body.className = theme; }, theme);
-    const stroke = await page.locator('.timeline svg').nth(1).evaluate(svg => getComputedStyle(svg).stroke);
-    expect(stroke).not.toBe('none');
-    expect(stroke).not.toBe('rgba(0, 0, 0, 0)');
-    await page.locator('.commit').first().click();
-    const colors = await page.locator('.selected').evaluate(row => ({ foreground: getComputedStyle(row).color, background: getComputedStyle(row).backgroundColor, outline: getComputedStyle(row).outlineStyle }));
-    expect(colors.foreground).not.toBe(colors.background); expect(colors.background).not.toBe('rgba(0, 0, 0, 0)');
-    if (theme.includes('high-contrast')) { expect(colors.outline).toBe('solid'); }
-    await page.screenshot({ path: testInfo.outputPath(`${theme}.png`) });
+  await load(page);
+  // set theme
+  await page.evaluate(theme => { document.body.className = theme; }, theme);
+
+  // Wait until the timeline SVG stroke is populated (styles applied)
+  await page.waitForFunction(() => {
+    const svgs = document.querySelectorAll('.timeline svg');
+    const svg = svgs[1];
+    return !!svg && getComputedStyle(svg).stroke !== '';
   });
+
+  const stroke = await page.locator('.timeline svg').nth(1).evaluate(svg => getComputedStyle(svg).stroke);
+  expect(stroke).not.toBe('none');
+  expect(stroke).not.toMatch(/rgba\(\s*0,\s*0,\s*0,\s*0\)|transparent/);
+
+  // Click to select a row and wait for the selected row styles to be applied
+  await page.locator('.commit').first().click();
+  await page.waitForFunction(() => {
+    const row = document.querySelector('.selected');
+    if (!row) return false;
+    const s = getComputedStyle(row);
+    return s.color !== '' && s.backgroundColor !== '';
+  });
+
+  const colors = await page.locator('.selected').evaluate(row => ({
+    foreground: getComputedStyle(row).color,
+    background: getComputedStyle(row).backgroundColor,
+    outline: getComputedStyle(row).outlineStyle || getComputedStyle(row).outline // try both props
+  }));
+
+  expect(colors.foreground).not.toBe(colors.background);
+  expect(colors.background).not.toMatch(/rgba\(\s*0,\s*0,\s*0,\s*0\)|transparent/);
+
+  if (theme.includes('high-contrast')) {
+    // ensure outline style is visible for high-contrast themes
+    expect(colors.outline).toBe('solid');
+  }
+
+  await page.screenshot({ path: testInfo.outputPath(`${theme}.png`) });
+});
 }
 
 test('10,000 commits stay virtualized and keyboard navigation scrolls to selection', async ({ page }) => {
