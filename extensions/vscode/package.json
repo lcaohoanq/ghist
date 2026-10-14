@@ -1,0 +1,131 @@
+{
+  "name": "ghist",
+  "displayName": "ghist \u2014 File History",
+  "description": "Explore how a file evolved through Git commits, following renames, with native read-only diffs.",
+  "version": "0.2.0",
+  "publisher": "lcaohoanq",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lcaohoanq/ghist.git",
+    "directory": "extensions/vscode"
+  },
+  "engines": {
+    "vscode": "^1.100.0",
+    "node": ">=22"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "history",
+    "diff",
+    "rename"
+  ],
+  "main": "./out/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onFileSystem:ghist"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "ghist.fileHistory",
+        "title": "File History",
+        "category": "ghist",
+        "icon": "$(history)"
+      },
+      {
+        "command": "ghist.refresh",
+        "title": "Refresh History",
+        "category": "ghist",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "ghist.openDiff",
+        "title": "Open Changes",
+        "category": "ghist",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "ghist.openFile",
+        "title": "Open File at Commit",
+        "category": "ghist",
+        "icon": "$(go-to-file)"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "ghist.fileHistory",
+          "when": "resourceScheme == file && !explorerResourceIsFolder",
+          "group": "git@10"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "ghist.fileHistory",
+          "when": "resourceScheme == file",
+          "group": "git@10"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "ghist.fileHistory",
+          "when": "resourceScheme == file",
+          "group": "git@10"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ghist.openFile",
+          "when": "false"
+        },
+        {
+          "command": "ghist.openDiff",
+          "when": "false"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "ghist",
+      "properties": {
+        "ghist.backendPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to a custom ghist-backend executable. Leave empty to use the bundled backend."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p . && tsc -p tsconfig.webview.json",
+    "watch": "tsc -w -p .",
+    "build:backend": "node scripts/build-backend.mjs",
+    "build": "npm run compile && npm run build:backend",
+    "test": "npm run build && node --test out/test/*.test.js",
+    "test:extension": "npm run build && node scripts/test-extension.mjs",
+    "package": "node scripts/package.mjs",
+    "test:webview": "npm run compile && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.0",
+    "@types/node": "^22.0.0",
+    "@types/vscode": "1.100.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^4.0.0",
+    "typescript": "^5.9.0"
+  }
+}
